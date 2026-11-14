@@ -1,0 +1,41 @@
+<x-layouts.app :title="$class->subject">
+    <div class="mb-5">
+        <h1 class="h1">{{ $class->subject }} <span class="font-medium text-slate-500">· {{ $class->section }}</span></h1>
+        <p class="text-sm text-slate-500">{{ $class->teacher->name }} · {{ $class->year_level }} · {{ $class->school_term }} · {{ $class->semester }} sem</p>
+        @if ($class->schedules->isNotEmpty())
+            <p class="mt-1 text-sm text-slate-500">
+                @foreach ($class->schedules as $row){{ $row->dayName() }} {{ substr($row->start_time, 0, 5) }}–{{ substr($row->end_time, 0, 5) }}@if ($row->room) ({{ $row->room }})@endif{{ $loop->last ? '' : ' · ' }}@endforeach
+            </p>
+        @endif
+    </div>
+
+    {{-- The student's own attendance this semester --}}
+    <div class="card">
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h2 class="h2">My attendance this semester</h2>
+            <a href="{{ route('attendance.history', ['class_id' => $class->id]) }}" class="text-sm text-brand-600 hover:underline">Full history →</a>
+        </div>
+
+        <dl class="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
+            <div class="rounded-lg bg-emerald-50 p-3"><dt class="text-xs text-emerald-700">Present</dt><dd class="text-2xl font-bold text-emerald-800">{{ $mine['present'] }}</dd></div>
+            <div class="rounded-lg bg-amber-50 p-3"><dt class="text-xs text-amber-700">Late</dt><dd class="text-2xl font-bold text-amber-800">{{ $mine['late'] }}</dd></div>
+            <div class="rounded-lg bg-red-50 p-3"><dt class="text-xs text-red-700">Absent</dt><dd class="text-2xl font-bold text-red-800">{{ $mine['absent'] }}</dd></div>
+            <div class="rounded-lg bg-slate-50 p-3"><dt class="text-xs text-slate-500">Attendance rate</dt><dd class="text-2xl font-bold">{{ $mine['rate'] === null ? '—' : $mine['rate'].'%' }}</dd></div>
+        </dl>
+        <p class="mt-3 text-xs text-slate-500">Out of {{ $held }} {{ \Illuminate\Support\Str::plural('session', $held) }} held so far this semester.</p>
+
+        <a href="{{ route('scanner') }}" class="btn-primary mt-4 w-full sm:w-auto">Scan attendance QR</a>
+    </div>
+
+    {{-- FR-ANN-03: announcements and cancellations from the teacher --}}
+    <div class="card mt-6" id="announcements">
+        <h2 class="h2 mb-3">Announcements</h2>
+        <div class="space-y-3">
+            @forelse ($announcements as $a)
+                @include('classes._announcement-item', ['a' => $a])
+            @empty
+                <p class="text-sm text-slate-500">No announcements yet.</p>
+            @endforelse
+        </div>
+    </div>
+</x-layouts.app>

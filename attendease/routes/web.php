@@ -1,0 +1,112 @@
+<?php
+
+use App\Http\Controllers\AnnouncementController;
+use App\Http\Controllers\AttendanceCorrectionController;
+use App\Http\Controllers\AttendanceHistoryController;
+use App\Http\Controllers\AttendanceSessionController;
+use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\PasswordController;
+use App\Http\Controllers\Auth\PasswordResetController;
+use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\ClassController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EnrollmentController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ReportController;
+use App\Http\Controllers\ScanController;
+use Illuminate\Support\Facades\Route;
+
+/* ---------------------------------------------------------------------
+ | Public (guest) pages
+ * --------------------------------------------------------------------- */
+Route::middleware('guest')->group(function () {
+    Route::get('/register', [RegisterController::class, 'create'])->name('register');
+    Route::post('/register', [RegisterController::class, 'store']);
+
+    Route::get('/login', [LoginController::class, 'create'])->name('login');
+    Route::post('/login', [LoginController::class, 'store']);
+
+    Route::get('/forgot-password', [PasswordResetController::class, 'request'])->name('password.request');
+    Route::post('/forgot-password', [PasswordResetController::class, 'email'])->name('password.email');
+    Route::get('/reset-password/{token}', [PasswordResetController::class, 'edit'])->name('password.reset');
+    Route::post('/reset-password', [PasswordResetController::class, 'update'])->name('password.store');
+});
+
+/* ---------------------------------------------------------------------
+ | Everything else sits behind auth (FR-ACL-01)
+ * --------------------------------------------------------------------- */
+Route::middleware(['auth', 'auth.session'])->group(function () {
+    Route::post('/logout', [LoginController::class, 'destroy'])->name('logout');
+
+    Route::redirect('/', '/dashboard');
+    Route::get('/dashboard', DashboardController::class)->name('dashboard');
+    Route::get('/dashboard/today', [DashboardController::class, 'today'])->name('dashboard.today'); // polled by the dashboard
+    Route::get('/dashboard/today/mine', [DashboardController::class, 'todayStudent'])->name('dashboard.today.student');
+
+    // Account
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::get('/password', [PasswordController::class, 'edit'])->name('password.edit');
+    Route::put('/password', [PasswordController::class, 'update'])->name('password.update');
+
+    // Notifications (FR-NOTIF-01)
+    Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::post('/notifications/read-all', [NotificationController::class, 'readAll'])->name('notifications.read-all');
+    Route::post('/notifications/{id}/read', [NotificationController::class, 'read'])->name('notifications.read');
+
+    // Classes and enrollment (section 4)
+    Route::get('/classes/create', [ClassController::class, 'create'])->name('classes.create');
+    Route::post('/classes', [ClassController::class, 'store'])->name('classes.store');
+    Route::post('/classes/join', [EnrollmentController::class, 'join'])->name('classes.join');
+    Route::get('/classes/{class}', [ClassController::class, 'show'])->name('classes.show');
+    Route::get('/classes/{class}/edit', [ClassController::class, 'edit'])->name('classes.edit');
+    Route::put('/classes/{class}', [ClassController::class, 'update'])->name('classes.update');
+    Route::put('/classes/{class}/schedule', [ClassController::class, 'updateSchedule'])->name('classes.schedule');
+    Route::get('/classes/{class}/students', [EnrollmentController::class, 'index'])->name('classes.students');
+    Route::post('/enrollments/{enrollment}/approve', [EnrollmentController::class, 'approve'])->name('enrollments.approve');
+    Route::post('/enrollments/{enrollment}/reject', [EnrollmentController::class, 'reject'])->name('enrollments.reject');
+    Route::post('/enrollments/{enrollment}/remove', [EnrollmentController::class, 'remove'])->name('enrollments.remove');
+
+    // Attendance (section 5)
+    Route::get('/classes/{class}/sessions', [AttendanceSessionController::class, 'index'])->name('sessions.index');
+    Route::post('/classes/{class}/sessions', [AttendanceSessionController::class, 'store'])->name('sessions.store');
+    // Archived sessions (FR-ATT-16) can still be viewed and restored; every other action needs an active one.
+    Route::get('/sessions/{attendanceSession}', [AttendanceSessionController::class, 'show'])->withTrashed()->name('sessions.show');
+    Route::get('/sessions/{attendanceSession}/edit', [AttendanceSessionController::class, 'edit'])->name('sessions.edit');
+    Route::put('/sessions/{attendanceSession}', [AttendanceSessionController::class, 'update'])->name('sessions.update');
+    Route::post('/sessions/{attendanceSession}/archive', [AttendanceSessionController::class, 'archive'])->name('sessions.archive');
+    Route::post('/sessions/{attendanceSession}/restore', [AttendanceSessionController::class, 'restore'])->withTrashed()->name('sessions.restore');
+    Route::delete('/sessions/{attendanceSession}', [AttendanceSessionController::class, 'destroy'])->withTrashed()->name('sessions.destroy');
+    Route::post('/sessions/{attendanceSession}/stages/{stage}/open', [AttendanceSessionController::class, 'open'])
+        ->whereIn('stage', ['time_in', 'time_out'])->name('sessions.open');
+    Route::post('/sessions/{attendanceSession}/stages/{stage}/close', [AttendanceSessionController::class, 'close'])
+        ->whereIn('stage', ['time_in', 'time_out'])->name('sessions.close');
+    Route::get('/sessions/{attendanceSession}/live', [AttendanceSessionController::class, 'live'])->name('sessions.live');
+    Route::get('/sessions/{attendanceSession}/live/state', [AttendanceSessionController::class, 'liveState'])->name('sessions.live.state');
+    Route::post('/sessions/{attendanceSession}/records', [AttendanceSessionController::class, 'manual'])->name('sessions.manual');
+    Route::post('/flags/{scanFlag}/clear', [AttendanceSessionController::class, 'clearFlag'])->name('flags.clear');
+
+    Route::view('/scanner', 'scan.scanner')->name('scanner'); // in-app camera QR reader
+    Route::get('/scan', [ScanController::class, 'show'])->name('scan');
+    Route::post('/scan', [ScanController::class, 'store'])->name('scan.store');
+    Route::get('/my/attendance', AttendanceHistoryController::class)->name('attendance.history');
+
+    // Announcements and class cancellations (FR-ANN)
+    Route::get('/classes/{class}/announcements', [AnnouncementController::class, 'index'])->name('announcements.index');
+    Route::post('/classes/{class}/announcements', [AnnouncementController::class, 'store'])->name('announcements.store');
+    Route::get('/announcements/{announcement}/edit', [AnnouncementController::class, 'edit'])->name('announcements.edit');
+    Route::put('/announcements/{announcement}', [AnnouncementController::class, 'update'])->name('announcements.update');
+    Route::delete('/announcements/{announcement}', [AnnouncementController::class, 'destroy'])->name('announcements.destroy');
+
+    // Correction requests (FR-ATT-18)
+    Route::post('/records/{attendanceRecord}/corrections', [AttendanceCorrectionController::class, 'store'])->name('corrections.store');
+    Route::get('/classes/{class}/corrections', [AttendanceCorrectionController::class, 'index'])->name('corrections.index');
+    Route::post('/corrections/{correction}/approve', [AttendanceCorrectionController::class, 'approve'])->name('corrections.approve');
+    Route::post('/corrections/{correction}/reject', [AttendanceCorrectionController::class, 'reject'])->name('corrections.reject');
+
+    // Attendance report (section 7)
+    Route::get('/classes/{class}/report', [ReportController::class, 'show'])->name('reports.show');
+    Route::get('/classes/{class}/report.docx', [ReportController::class, 'docx'])->name('reports.docx');
+    Route::get('/classes/{class}/report.pdf', [ReportController::class, 'pdf'])->name('reports.pdf');
+});
