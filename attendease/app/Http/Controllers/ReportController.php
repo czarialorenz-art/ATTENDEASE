@@ -10,9 +10,6 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-use PhpOffice\PhpWord\IOFactory;
-use PhpOffice\PhpWord\PhpWord;
-use PhpOffice\PhpWord\SimpleType\Jc;
 
 /**
  * FR-RPT-01..03: attendance summary, teacher only.
@@ -27,7 +24,7 @@ class ReportController extends Controller
         'semester' => 'Semester',
     ];
 
-    /** Date columns per table in the PDF and Word downloads (portrait A4). */
+    /** Date columns per table in the PDF download (portrait A4). */
     public const DATES_PER_PRINTED_TABLE = 8;
 
     public function __construct(private ClassStatsService $stats) {}
@@ -47,91 +44,6 @@ class ReportController extends Controller
         return Pdf::loadView('pdf.attendance-report', $d)
             ->setPaper('a4', 'portrait')
             ->download($d['fileName'].'.pdf');
-    }
-
-    public function docx(Request $request, SchoolClass $class)
-    {
-        $this->authorize('teach', $class);
-        $d = $this->data($request, $class);
-
-        $word = new PhpWord;
-        $word->setDefaultFontName('Arial');
-        $word->setDefaultFontSize(10);
-
-        // Portrait A4 (11906 × 16838 twips) with 0.6" margins.
-        $section = $word->addSection(['orientation' => 'portrait', 'pageSizeW' => 11906, 'pageSizeH' => 16838,
-            'marginLeft' => 860, 'marginRight' => 860, 'marginTop' => 900, 'marginBottom' => 900]);
-        $section->addText($d['schoolName'], ['bold' => true, 'size' => 14], ['alignment' => Jc::CENTER]);
-        $section->addText($d['title'], ['bold' => true, 'size' => 12], ['alignment' => Jc::CENTER, 'spaceAfter' => 200]);
-
-        foreach ($d['header'] as $label => $value) {
-            $run = $section->addTextRun(['spaceAfter' => 0]);
-            $run->addText($label.': ', ['bold' => true]);
-            $run->addText((string) $value);
-        }
-        $section->addTextBreak();
-
-        $word->addTableStyle('report', ['borderSize' => 6, 'borderColor' => '999999', 'cellMargin' => 40], ['bgColor' => 'E5E7EB']);
-        $small = ['size' => 8];
-        $smallBold = ['size' => 8, 'bold' => true];
-        $center = ['alignment' => Jc::CENTER, 'spaceAfter' => 0];
-        $markColor = ['P' => '1E7B47', 'L' => 'B45309', 'A' => 'B42318'];
-
-        // FR-RPT-04: attendance sheet grid. Long periods continue in further tables of 15 dates;
-        // the totals are on the last one.
-        $blocks = $d['columnBlocks']->isEmpty() ? collect([collect()]) : $d['columnBlocks'];
-        foreach ($blocks as $b => $block) {
-            $last = $b === $blocks->count() - 1;
-
-            if ($blocks->count() > 1) {
-                $section->addText('Dates '.($b * self::DATES_PER_PRINTED_TABLE + 1).'–'.($b * self::DATES_PER_PRINTED_TABLE + $block->count())
-                    .' of '.$d['columns']->count(), ['bold' => true, 'size' => 9], ['spaceBefore' => $b ? 200 : 0, 'spaceAfter' => 60]);
-            }
-
-            $table = $section->addTable('report');
-            $table->addRow(null, ['tblHeader' => true]);
-            // Widths in twips: 4210 fixed + 8 dates x 520 + 1820 totals = 10190, the portrait text width.
-            $widths = ['#' => 360, 'Student No.' => 1100, 'Name' => 2050, 'Section' => 700];
-            foreach ($widths as $h => $w) {
-                $table->addCell($w)->addText($h, $smallBold);
-            }
-            foreach ($block as $col) {
-                $cell = $table->addCell(520);
-                $cell->addText($col['day'], $smallBold, $center);
-                $cell->addText($col['sub'], ['size' => 7], $center);
-            }
-            if ($last) {
-                foreach (['P' => 380, 'L' => 380, 'A' => 380] as $h => $w) {
-                    $table->addCell($w)->addText($h, $smallBold, $center);
-                }
-            }
-
-            foreach ($d['rows'] as $i => $row) {
-                $table->addRow();
-                $table->addCell($widths['#'])->addText((string) ($i + 1), $small);
-                $table->addCell($widths['Student No.'])->addText($row['student']->id_number, $small);
-                $table->addCell($widths['Name'])->addText($row['student']->name.($row['removed'] ? ' (removed)' : ''), $small);
-                $table->addCell($widths['Section'])->addText($row['student']->section ?: '—', $small);
-                foreach ($block as $col) {
-                    $mark = $row['marks'][$col['id']];
-                    $table->addCell(520)->addText($mark, ['size' => 8, 'bold' => true, 'color' => $markColor[$mark]], $center);
-                }
-                if ($last) {
-                    $table->addCell(380)->addText((string) $row['present'], $small, $center);
-                    $table->addCell(380)->addText((string) $row['late'], $small, $center);
-                    $table->addCell(380)->addText((string) $row['absent'], $small, $center);                }
-            }
-        }
-
-        $section->addTextBreak();
-        $section->addText('P = Present · L = Late · A = Absent. Sessions held in this period: '.$d['held'].'.', ['italic' => true, 'size' => 9]);
-
-        $path = tempnam(sys_get_temp_dir(), 'rpt');
-        IOFactory::createWriter($word, 'Word2007')->save($path);
-
-        return response()->download($path, $d['fileName'].'.docx', [
-            'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        ])->deleteFileAfterSend();
     }
 
     /**

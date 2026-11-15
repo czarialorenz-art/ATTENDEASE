@@ -107,6 +107,5 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
 
     // Attendance report (section 7)
     Route::get('/classes/{class}/report', [ReportController::class, 'show'])->name('reports.show');
-    Route::get('/classes/{class}/report.docx', [ReportController::class, 'docx'])->name('reports.docx');
     Route::get('/classes/{class}/report.pdf', [ReportController::class, 'pdf'])->name('reports.pdf');
 });

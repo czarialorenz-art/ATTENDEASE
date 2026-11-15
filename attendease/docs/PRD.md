@@ -25,7 +25,7 @@ Stored in `.env` and read through `config('app.school_name')`. Never hard-coded 
 - Replace paper roll calls with a rotating QR code that only works on the session date, while a stage is open.
 - Let students scan with either their phone's camera app or a scanner built into the app.
 - Flag suspicious scans for the teacher to review, without blocking students.
-- Produce attendance reports by day, week, month or semester, on screen and as Word or PDF files.
+- Produce attendance reports by day, week, month or semester, on screen and as PDF files.
 
 ### Non-goals
 
@@ -187,8 +187,8 @@ A teacher opens a dated session, runs a Time In stage and then a Time Out stage,
   The period is kept in the URL, so a view can be bookmarked.
 - **FR-RPT-02** The report header shows the school name, subject, section, school term, semester, the teacher's name and when it was generated. The period covered is part of the Semester line, e.g. "1st semester (Aug 3, 2026 – Nov 14, 2026)" or "1st semester · Week of Nov 9 – Nov 15, 2026"; there is no separate Period line. The title follows the period: "Daily / Weekly / Monthly / Semester Attendance Summary".
 - **FR-RPT-02a** *(new)* Each row shows the student number, name, the student's own section (or "—" if not set) and the counts. Removed students still appear, marked "removed", since their history is kept.
-- **FR-RPT-04** *(new)* The report is an **attendance sheet grid**: one column per session held in the period, in date order (headed by date and weekday; two sessions on one day show as "#1", "#2"), with **P**, **L** or **A** for each student, then the Present, Late and Absent totals. A held session with no record shows A. On screen the grid scrolls sideways with the student's name kept in view, and hovering a cell shows the full date and session title. The PDF and Word downloads are portrait A4, with the dates printed 8 per table, the student list repeated and the totals on the last table.
-- **FR-RPT-03** The report can be viewed on screen and downloaded as a Word document (.docx, via phpoffice/phpword) or a PDF (via barryvdh/laravel-dompdf), for the same period. File names include the subject, section and period (e.g. `ITE101_BSIT-1A_Attendance_2026-09.pdf`). Only the class's teacher can view or download it.
+- **FR-RPT-04** *(new)* The report is an **attendance sheet grid**: one column per session held in the period, in date order (headed by date and weekday; two sessions on one day show as "#1", "#2"), with **P**, **L** or **A** for each student, then the Present, Late and Absent totals. A held session with no record shows A. On screen the grid scrolls sideways with the student's name kept in view, and hovering a cell shows the full date and session title. The PDF download is portrait A4, with the dates printed 8 per table, the student list repeated and the totals on the last table.
+- **FR-RPT-03** The report can be viewed on screen and downloaded as a PDF (via barryvdh/laravel-dompdf), for the same period. (A Word .docx download existed earlier and was removed.) File names include the subject, section and period (e.g. `ITE101_BSIT-1A_Attendance_2026-09.pdf`). Only the class's teacher can view or download it.
 
 ---
 
@@ -255,7 +255,7 @@ Laravel's `cache`, `jobs` and `failed_jobs` tables are also used (rate limiting,
   - Sessions: list and "New session" form.
   - Session detail: stage controls, attendance table with manual status changes, flagged scans, settings.
   - Live QR screen for an open stage (full screen).
-  - Report: period picker, on-screen report, .docx and PDF download.
+  - Report: period picker, on-screen report, PDF download.
 - **As a class's student:**
   - Class page: teacher, schedule and own attendance summary (FR-ATT-15).
   - Attendance history (FR-ATT-14).
@@ -294,7 +294,7 @@ Laravel's `cache`, `jobs` and `failed_jobs` tables are also used (rate limiting,
 - [ ] A scan within the grace period is Present, after it Late, and a second scan in the same stage is refused. A student with no Time Out is Absent once Time Out closes.
 - [ ] Each of the 4 flag rules creates a flag without blocking the scan, and the teacher can clear it.
 - [ ] The report shows the right counts for a day, a week, a month and the semester, and includes each student's section.
-- [ ] The report downloads as both .docx and .pdf, for the chosen period; students get 403.
+- [ ] The report downloads as a PDF for the chosen period; students get 403.
 - [ ] A student's class page and history show only their own attendance, enforced on the server.
 
 ---

@@ -62,7 +62,6 @@ class AccessControlTest extends TestCase
             ['post', "/sessions/{$session->id}/records"],
             ['post', "/flags/{$flag->id}/clear"],
             ['get', "/classes/{$class->id}/report"],
-            ['get', "/classes/{$class->id}/report.docx"],
             ['get', "/classes/{$class->id}/report.pdf"],
         ];
 

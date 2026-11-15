@@ -39,7 +39,6 @@
                 </dl>
             </div>
             <div class="flex gap-2">
-                <a href="{{ route('reports.docx', [$class, ...$query]) }}" class="btn-secondary">Download .docx</a>
                 <a href="{{ route('reports.pdf', [$class, ...$query]) }}" class="btn-primary">Download PDF</a>
             </div>
         </div>

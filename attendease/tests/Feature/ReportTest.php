@@ -93,8 +93,8 @@ class ReportTest extends TestCase
         $base = FileName::safe($class->subject).'_'.FileName::safe($class->section);
         $this->actingAs($teacher)->get("/classes/{$class->id}/report.pdf?period=month&date=2026-09-20")
             ->assertOk()->assertDownload($base.'_Attendance_2026-09.pdf');
-        $this->actingAs($teacher)->get("/classes/{$class->id}/report.docx?period=week&date=2026-09-03")
-            ->assertOk()->assertDownload($base.'_Attendance_Week_2026-08-31.docx');
+        $this->actingAs($teacher)->get("/classes/{$class->id}/report.pdf?period=week&date=2026-09-03")
+            ->assertOk()->assertDownload($base.'_Attendance_Week_2026-08-31.pdf');
     }
 
     public function test_fr_rpt_02_period_is_shown_in_the_semester_line(): void
@@ -132,21 +132,13 @@ class ReportTest extends TestCase
             ->assertSee('data-mark="P"', false)->assertSee('data-mark="L"', false)->assertSee('data-mark="A"', false)
             ->assertSee('Tuesday, Sep 1, 2026', false);                                    // full date on hover
 
-        // Same grid in the PDF and Word downloads.
+        // Same grid in the PDF download.
         $html = view('pdf.attendance-report', $res->original->getData())->render();
         $this->assertStringContainsString('Sep 1<small>Tue</small>', $html);
         $this->assertStringNotContainsString('>Rate</th>', $html);
         $this->assertStringContainsString('<th>Student No.</th>', $html);
         $this->assertSame(2, substr_count($html, 'class="m m-A"'));
-
-        $docx = $this->actingAs($t)->get("/classes/{$c->id}/report.docx")->assertOk();
-        $zip = new \ZipArchive;
-        $zip->open($docx->baseResponse->getFile()->getPathname());
-        $xml = $zip->getFromName('word/document.xml');
-        $zip->close();
-        $this->assertStringContainsString('>Sep 8<', $xml);
-        $this->assertStringNotContainsString('>Rate<', $xml);
-        $this->assertStringContainsString('P = Present', $xml);
+        $this->assertStringContainsString('P = Present', $html);
     }
 
     public function test_fr_rpt_04_two_sessions_on_one_day_and_long_periods_split_in_downloads(): void
@@ -188,31 +180,21 @@ class ReportTest extends TestCase
         $html = view('pdf.attendance-report', $this->actingAs($t)->get("/classes/{$c->id}/report")->original->getData())->render();
         $this->assertStringContainsString('<th>Section</th>', $html);
         $this->assertStringContainsString('<td>BSIT-2A</td>', $html);
-
-        $docx = $this->actingAs($t)->get("/classes/{$c->id}/report.docx")->assertOk();
-        $zip = new \ZipArchive;
-        $zip->open($docx->baseResponse->getFile()->getPathname());
-        $xml = $zip->getFromName('word/document.xml');
-        $zip->close();
-        $this->assertStringContainsString('>Section<', $xml);
-        $this->assertStringContainsString('>BSIT-2A<', $xml);
     }
 
-    /** Acceptance: the report downloads as both .docx and .pdf. */
-    public function test_fr_rpt_03_report_downloads_as_docx_and_pdf_teacher_only(): void
+    /** The report downloads as a PDF only (the Word download was removed). */
+    public function test_fr_rpt_03_report_downloads_as_pdf_teacher_only(): void
     {
         ['teacher' => $t, 'class' => $c, 'alice' => $alice] = $this->scenario();
 
-        $docx = $this->actingAs($t)->get("/classes/{$c->id}/report.docx")->assertOk();
-        $docx->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-        $this->assertStringEndsWith('.docx', $docx->headers->get('content-disposition'));
-        $this->assertSame("PK\x03\x04", substr(file_get_contents($docx->baseResponse->getFile()->getPathname()), 0, 4));
+        $page = $this->actingAs($t)->get("/classes/{$c->id}/report")->assertOk();
+        $page->assertSee('Download PDF')->assertDontSee('Download .docx');
 
         $pdf = $this->actingAs($t)->get("/classes/{$c->id}/report.pdf")->assertOk();
         $pdf->assertHeader('content-type', 'application/pdf');
         $this->assertStringStartsWith('%PDF', $pdf->getContent());
 
-        $this->actingAs($alice)->get("/classes/{$c->id}/report.docx")->assertForbidden();
+        $this->actingAs($t)->get("/classes/{$c->id}/report.docx")->assertNotFound();
         $this->actingAs($alice)->get("/classes/{$c->id}/report.pdf")->assertForbidden();
     }
 
