@@ -53,7 +53,7 @@ class ReportTest extends TestCase
 
         $res->assertSee(config('app.school_name'))->assertSee('ITE101')->assertSee('BSIT-1A')->assertSee('2026-2027')
             ->assertSee('1st')->assertSee('Prof. Ana Reyes')->assertSee(now()->format('M j, Y'))
-            ->assertSee('Bob Bautista')->assertSee('removed'); // removed students' history is kept
+            ->assertSee('Bautista, Bob')->assertSee('removed'); // removed students' history is kept
     }
 
     public function test_fr_rpt_01_report_period_can_be_day_week_month_or_semester(): void
@@ -175,7 +175,7 @@ class ReportTest extends TestCase
         $bob->update(['section' => null]);
 
         $this->actingAs($t)->get("/classes/{$c->id}/report")->assertOk()
-            ->assertSeeInOrder(['<th>Section</th>', 'Alice Aquino', 'BSIT-2A', 'Bob Bautista', '—'], false);
+            ->assertSeeInOrder(['<th>Section</th>', 'Aquino, Alice', 'BSIT-2A', 'Bautista, Bob', '—'], false);
 
         $html = view('pdf.attendance-report', $this->actingAs($t)->get("/classes/{$c->id}/report")->original->getData())->render();
         $this->assertStringContainsString('<th>Section</th>', $html);

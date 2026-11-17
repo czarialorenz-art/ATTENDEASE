@@ -45,7 +45,7 @@
                 <div class="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 py-2.5 first:border-0">
                     <div>
                         <div class="flex flex-wrap items-center gap-1.5 font-medium">
-                            {{ $e->student->name }}
+                            {{ $e->student->listName() }}
                             @include('classes._section-badge', ['student' => $e->student])
                         </div>
                         <div class="text-xs text-slate-500">{{ $e->student->id_number }} · {{ $e->student->email }} · {{ $e->updated_at->diffForHumans() }}</div>
@@ -70,7 +70,7 @@
                 <div class="flex items-center justify-between gap-2 border-t border-slate-100 py-2.5 first:border-0">
                     <div>
                         <div class="flex flex-wrap items-center gap-1.5 font-medium">
-                            {{ $e->student->name }}
+                            {{ $e->student->listName() }}
                             @include('classes._section-badge', ['student' => $e->student])
                         </div>
                         <div class="text-xs text-slate-500">{{ $e->student->id_number }} · {{ $e->student->email }}</div>
@@ -86,7 +86,7 @@
             @if ($removed->isNotEmpty())
                 <h3 class="mt-5 mb-1 text-sm font-semibold text-slate-600">Removed</h3>
                 @foreach ($removed as $e)
-                    <div class="text-sm text-slate-500">{{ $e->student->name }} · {{ $e->student->id_number }}{{ filled($e->student->section) ? ' · Section '.$e->student->section : '' }}</div>
+                    <div class="text-sm text-slate-500">{{ $e->student->listName() }} · {{ $e->student->id_number }}{{ filled($e->student->section) ? ' · Section '.$e->student->section : '' }}</div>
                 @endforeach
             @endif
         </section>

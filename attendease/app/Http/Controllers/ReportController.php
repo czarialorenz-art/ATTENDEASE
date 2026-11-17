@@ -80,8 +80,9 @@ class ReportController extends Controller
         // Approved students plus removed ones, whose history is kept for reports (FR-CLS-06).
         $students = $class->students()
             ->wherePivotIn('status', [Enrollment::APPROVED, Enrollment::REMOVED])
-            ->orderBy('name')
-            ->get();
+            ->get()
+            ->sortBy(fn ($u) => $u->surnameSortKey(), SORT_NATURAL) // by surname, like a class record
+            ->values();
 
         $report = $this->stats->termReport($class, $students, [$from->toDateString(), $to->toDateString()]);
 

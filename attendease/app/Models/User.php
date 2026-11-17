@@ -77,12 +77,65 @@ class User extends Authenticatable
             ->exists();
     }
 
-    /** FR-PDF-03: the last name is the final word of the full name. */
+    /** Words that join a compound surname, e.g. "Dela Cruz", "De los Santos", "San Juan". */
+    private const SURNAME_PARTICLES = ['de', 'del', 'dela', 'la', 'las', 'los', 'delos', 'di', 'da', 'san', 'santa', 'sta.', 'sto.', 'van', 'von', 'y'];
+
+    /** Name suffixes kept at the end, e.g. "Jr.", "III". */
+    private const NAME_SUFFIXES = ['jr', 'jr.', 'sr', 'sr.', 'ii', 'iii', 'iv', 'v'];
+
+    /**
+     * Splits the single full-name field into surname, given names (with middle initial) and suffix.
+     * "Maria Teresa A. Loreno" → [Loreno, Maria Teresa A., null];
+     * "Juan Miguel Dela Cruz Jr." → [Dela Cruz, Juan Miguel, Jr.].
+     *
+     * @return array{surname: string, given: string, suffix: ?string}
+     */
+    public function nameParts(): array
+    {
+        $words = preg_split('/\s+/', trim((string) $this->name)) ?: [];
+        $suffix = null;
+
+        if (count($words) > 2 && in_array(strtolower(end($words)), self::NAME_SUFFIXES, true)) {
+            $suffix = array_pop($words);
+        }
+        if (count($words) < 2) {
+            return ['surname' => (string) ($words[0] ?? ''), 'given' => '', 'suffix' => $suffix];
+        }
+
+        // The surname is the last word plus any particles right before it ("Dela", "De los"),
+        // as long as at least one given name is left.
+        $start = count($words) - 1;
+        while ($start > 1 && in_array(strtolower($words[$start - 1]), self::SURNAME_PARTICLES, true)) {
+            $start--;
+        }
+
+        return [
+            'surname' => implode(' ', array_slice($words, $start)),
+            'given' => implode(' ', array_slice($words, 0, $start)),
+            'suffix' => $suffix,
+        ];
+    }
+
+    /** "Loreno, Maria Teresa A." / "Dela Cruz, Juan Miguel Jr." for class lists and reports. */
+    public function listName(): string
+    {
+        ['surname' => $surname, 'given' => $given, 'suffix' => $suffix] = $this->nameParts();
+
+        return trim($surname.($given !== '' ? ', '.$given : '').($suffix ? ' '.$suffix : ''));
+    }
+
+    /** Sort key: surname, then given names (case-insensitive). */
+    public function surnameSortKey(): string
+    {
+        ['surname' => $surname, 'given' => $given] = $this->nameParts();
+
+        return mb_strtolower($surname.' '.$given);
+    }
+
+    /** FR-PDF-03: the surname, used in file names. */
     public function lastName(): string
     {
-        $parts = preg_split('/\s+/', trim($this->name)) ?: [];
-
-        return (string) end($parts);
+        return $this->nameParts()['surname'];
     }
 
     public function sendPasswordResetNotification(#[\SensitiveParameter] $token): void

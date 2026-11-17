@@ -142,7 +142,7 @@ class ClassEnrollmentTest extends TestCase
         $ea = Enrollment::where('student_id', $a->id)->first();
         $eb = Enrollment::where('student_id', $b->id)->first();
 
-        $this->actingAs($class->teacher)->get("/classes/{$class->id}/students")->assertSee($a->name)->assertSee($b->name);
+        $this->actingAs($class->teacher)->get("/classes/{$class->id}/students")->assertSee($a->listName())->assertSee($b->listName());
         $this->actingAs($class->teacher)->post("/enrollments/{$ea->id}/approve");
         $this->actingAs($class->teacher)->post("/enrollments/{$eb->id}/reject");
 
@@ -162,9 +162,9 @@ class ClassEnrollmentTest extends TestCase
         $this->enroll($class, User::factory()->create(['name' => 'Cara Uy', 'section' => 'BSIT-2C']), Enrollment::PENDING);
 
         $this->actingAs($class->teacher)->get("/classes/{$class->id}/students")->assertOk()
-            ->assertSeeInOrder(['Ana Cruz', 'Section BSIT-2A'])
-            ->assertSeeInOrder(['Ben Lim', 'No section'])
-            ->assertSeeInOrder(['Cara Uy', 'Section BSIT-2C']); // join requests show it too
+            ->assertSeeInOrder(['Cruz, Ana', 'Section BSIT-2A'])
+            ->assertSeeInOrder(['Lim, Ben', 'No section'])
+            ->assertSeeInOrder(['Uy, Cara', 'Section BSIT-2C']); // join requests show it too
     }
 
     public function test_fr_cls_10_students_page_filters_by_section_and_searches_by_name(): void
@@ -187,7 +187,7 @@ class ClassEnrollmentTest extends TestCase
 
         $this->assertSame(['Ana Cruz'], $names('section=A'));
         $this->assertSame(['Dina Ong'], $names('section=A', 'pending'));            // applies to join requests too
-        $this->assertSame(['Bea Santos', 'Ben Lim'], $names('section=b'));
+        $this->assertSame(['Ben Lim', 'Bea Santos'], $names('section=b'));
         $this->assertSame(['Carl Reyes'], $names('section=__none'));
         $this->assertSame(['Bea Santos'], $names('q=SANTOS'));                      // name, any case
         $this->assertSame(['Ben Lim'], $names('q=n%20li'));                         // part of a name

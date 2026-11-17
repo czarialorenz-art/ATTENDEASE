@@ -34,7 +34,7 @@ class EnrollmentController extends Controller
         $all = $class->enrollments()
             ->whereIn('status', [Enrollment::PENDING, Enrollment::APPROVED, Enrollment::REMOVED])
             ->with('student')->get()
-            ->sortBy(fn ($e) => $e->student->name, SORT_NATURAL | SORT_FLAG_CASE)
+            ->sortBy(fn ($e) => $e->student->surnameSortKey(), SORT_NATURAL) // by surname
             ->values();
 
         // Sections that actually occur among this class's students, for the dropdown.

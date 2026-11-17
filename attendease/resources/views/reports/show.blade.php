@@ -72,7 +72,7 @@
                         <tr>
                             <td>{{ $i + 1 }}</td>
                             <td class="font-mono text-xs whitespace-nowrap">{{ $r['student']->id_number }}</td>
-                            <td class="sticky left-0 z-10 bg-white whitespace-nowrap">{{ $r['student']->name }} @if ($r['removed'])<span class="badge-removed">removed</span>@endif</td>
+                            <td class="sticky left-0 z-10 bg-white whitespace-nowrap">{{ $r['student']->listName() }} @if ($r['removed'])<span class="badge-removed">removed</span>@endif</td>
                             <td class="whitespace-nowrap">{{ $r['student']->section ?: '—' }}</td>
                             @foreach ($columns as $col)
                                 @php($mark = $r['marks'][$col['id']])

@@ -171,10 +171,12 @@ class AttendanceSessionController extends Controller
         $session = $attendanceSession->load('schoolClass');
 
         $records = $session->records()->with(['scanLogs.flags.clearedBy'])->get()->keyBy('student_id');
-        $students = $session->schoolClass->approvedStudents()->orderBy('name')->get();
+        // Class lists are by surname: "Cruz, Ana", "Loreno, Maria Teresa A.", ...
+        $students = $session->schoolClass->approvedStudents()->get()->sortBy(fn ($u) => $u->surnameSortKey(), SORT_NATURAL)->values();
 
         // Include removed students who still have a record here (FR-CLS-06 keeps their history).
-        $extra = User::whereIn('id', $records->keys()->diff($students->pluck('id')))->orderBy('name')->get();
+        $extra = User::whereIn('id', $records->keys()->diff($students->pluck('id')))->get()
+            ->sortBy(fn ($u) => $u->surnameSortKey(), SORT_NATURAL)->values();
 
         $flags = ScanFlag::whereHas('scanLog.record', fn ($q) => $q->where('attendance_session_id', $session->id))
             ->with(['scanLog.record.student', 'clearedBy'])

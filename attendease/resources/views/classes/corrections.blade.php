@@ -36,7 +36,7 @@
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="min-w-0">
                             <div class="flex flex-wrap items-center gap-1.5 font-semibold">
-                                {{ $c->student->name }}
+                                {{ $c->student->listName() }}
                                 @include('classes._section-badge', ['student' => $c->student])
                             </div>
                             <div class="text-xs text-slate-500">{{ $c->student->id_number }} · requested {{ $c->created_at->format('M j, g:i A') }}</div>

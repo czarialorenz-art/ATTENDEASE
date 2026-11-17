@@ -88,7 +88,7 @@
                                 @php($flagCount = $r ? $r->scanLogs->flatMap->flags->whereNull('cleared_at')->count() : 0)
                                 <tr>
                                     <td>
-                                        <div class="font-medium whitespace-nowrap">{{ $student->name }}</div>
+                                        <div class="font-medium whitespace-nowrap">{{ $student->listName() }}</div>
                                         <div class="font-mono text-xs text-slate-500">{{ $student->id_number }}</div>
                                     </td>
                                     <td class="whitespace-nowrap">
@@ -134,7 +134,7 @@
                         <tbody>
                             @forelse ($flags as $f)
                                 <tr @class(['opacity-60' => $f->isCleared()])>
-                                    <td class="whitespace-nowrap">{{ $f->scanLog->record->student->name }}</td>
+                                    <td class="whitespace-nowrap">{{ $f->scanLog->record->student->listName() }}</td>
                                     <td><span class="badge-flag">{{ $f->code }}</span><div class="text-xs text-slate-500">{{ ScanFlag::DESCRIPTIONS[$f->code] ?? '' }}</div></td>
                                     <td class="whitespace-nowrap">{{ S::stageLabel($f->scanLog->stage) }}</td>
                                     <td class="whitespace-nowrap">
