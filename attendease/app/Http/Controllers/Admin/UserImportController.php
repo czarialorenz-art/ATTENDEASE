@@ -34,7 +34,7 @@ class UserImportController extends Controller
     {
         $data = $request->validate([
             'type' => ['required', Rule::in(array_keys(UserImportService::TYPES))],
-            // FR-ADM-16: optional values for every student row; blank = "From the file".
+            // FR-ADM-16: optional values for every student row; blank = not set (or the file's column, if it has one).
             'course' => ['nullable', Rule::in(array_keys(StudentInfo::courses()))],
             'year_level' => ['nullable', 'integer', Rule::in(StudentInfo::yearLevels())],
             'section' => ['nullable', Rule::in(StudentInfo::sections())],

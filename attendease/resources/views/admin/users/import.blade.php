@@ -99,23 +99,23 @@
 
             {{-- FR-ADM-16: course / year level / section for every student row, or from the file --}}
             <fieldset data-student-only @class(['rounded-lg border border-slate-200 p-4', 'hidden' => $type !== 'student'])>
-                <legend class="px-1 text-sm font-semibold text-slate-700">Students' course, year level and section</legend>
-                <p class="mb-3 text-xs text-slate-500">Pick a value to give it to every student in the file (the file then doesn't need that column), or leave “From the file” to read it per row.</p>
+                <legend class="px-1 text-sm font-semibold text-slate-700">Students' course, year level and section <span class="font-normal text-slate-500">(optional)</span></legend>
+                <p class="mb-3 text-xs text-slate-500">Pick a value to give it to every student in the file. Leave “Not set” to leave it empty; it can be added later in User Management → Edit or by the student on their Profile.</p>
                 <div class="grid gap-3 sm:grid-cols-3">
                     <x-field name="course" label="Course" type="select" data-fixed="course">
-                        <option value="">From the file</option>
+                        <option value="">Not set</option>
                         @foreach (StudentInfo::courses() as $code => $name)
                             <option value="{{ $code }}" title="{{ $name }}" @selected(old('course') === $code)>{{ $code }}</option>
                         @endforeach
                     </x-field>
                     <x-field name="year_level" label="Year level" type="select" data-fixed="year_level">
-                        <option value="">From the file</option>
+                        <option value="">Not set</option>
                         @foreach (StudentInfo::yearLevels() as $level)
                             <option value="{{ $level }}" @selected((string) old('year_level') === (string) $level)>{{ StudentInfo::yearLabel($level) }}</option>
                         @endforeach
                     </x-field>
                     <x-field name="section" label="Section" type="select" data-fixed="section">
-                        <option value="">From the file</option>
+                        <option value="">Not set</option>
                         @foreach (StudentInfo::sections() as $letter)
                             <option value="{{ $letter }}" @selected(old('section') === $letter)>Section {{ $letter }}</option>
                         @endforeach

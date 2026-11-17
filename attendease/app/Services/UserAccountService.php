@@ -29,14 +29,14 @@ class UserAccountService
     }
 
     /** Validation rules for the profile fields of an account (role and password are handled by the caller). */
-    public function rules(?User $ignore = null): array
+    public function rules(?User $ignore = null, bool $requireStudentInfo = true): array
     {
         return [
             'name' => ['required', 'string', 'max:255'],
             'id_number' => ['required', 'string', 'max:50', Rule::unique('users', 'id_number')->ignore($ignore?->id)],
             // FR-ADM-13: optional; when given, a unique school address. Blank is stored as NULL, so it is never a duplicate.
             'email' => ['nullable', 'string', 'email', 'max:255', new SchoolEmail, Rule::unique('users', 'email')->ignore($ignore?->id)],
-            ...$this->studentInfoRules(),
+            ...$this->studentInfoRules($requireStudentInfo),
             'department' => ['nullable', 'string', 'max:255'],
         ];
     }

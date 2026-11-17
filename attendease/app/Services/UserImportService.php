@@ -37,9 +37,6 @@ class UserImportService
             'id_number' => ['ID Number', true],
             'name' => ['Name', true],
             'email' => ['Email', false],
-            'course' => ['Course', true],
-            'year_level' => ['Year Level', true],
-            'section' => ['Section', true],
         ],
         User::TEACHER => [
             'id_number' => ['ID Number', true],
@@ -53,6 +50,15 @@ class UserImportService
      * FR-ADM-15: headings that mean each field, compared after normalizing (no case, dots,
      * underscores, hyphens, asterisks, brackets or extra spaces): "ID No." = "id_no" = "ID NO".
      */
+    /**
+     * Optional columns that aren't in the template but are still read (and checked) when a file has them.
+     * A student's course, year level and section are optional and usually set with the page's dropdowns.
+     */
+    public const EXTRA_COLUMNS = [
+        User::STUDENT => ['course', 'year_level', 'section'],
+        User::TEACHER => [],
+    ];
+
     public const HEADING_ALIASES = [
         'id_number' => ['id number', 'id no', 'id num', 'id #', 'id', 'id code', 'student id', 'student id number', 'student id no',
             'student no', 'student number', 'student num', 'teacher id', 'employee id', 'employee no', 'employee number', 'school id', 'id nos'],
@@ -212,7 +218,7 @@ class UserImportService
         $map = [];
         foreach ($headings as $i => $heading) {
             $field = $lookup[self::normalizeHeading($heading)] ?? null;
-            if ($field && array_key_exists($field, self::COLUMNS[$type]) && ! isset($map[$field])) {
+            if ($field && (array_key_exists($field, self::COLUMNS[$type]) || in_array($field, self::EXTRA_COLUMNS[$type], true)) && ! isset($map[$field])) {
                 $map[$field] = $i; // the first matching column wins
             }
         }
@@ -284,7 +290,8 @@ class UserImportService
             $reasons[] = 'Duplicate email: same as row '.$seenEmails[$data['email']].' of this file.';
         }
 
-        $validator = Validator::make($data, $this->accounts->rules(), [
+        // Course, year level and section are optional in an import, but must be valid when given.
+        $validator = Validator::make($data, $this->accounts->rules(requireStudentInfo: false), [
             'id_number.required' => 'ID Number is required.',
             'name.required' => 'Name is required.',
             'id_number.unique' => 'ID number :input already belongs to an account.',
