@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Imports\UsersImport;
 use App\Models\User;
+use App\Rules\SchoolEmail;
 use App\Support\Audit;
 use App\Support\StudentInfo;
 use Illuminate\Http\UploadedFile;
@@ -84,10 +85,13 @@ class UserImportService
     }
 
     /**
-     * @return array{type: string, imported: int, skipped: list<array{row: int, id_number: ?string, reasons: list<string>}>, file: string}
+     * @param  array{course?: ?string, year_level?: ?int, section?: ?string}  $fixed  FR-ADM-16: values chosen on the page for every
+     *         student row (the file's column is then not needed); null = read the column
+     * @return array{type: string, imported: int, skipped: list<array{row: int, id_number: ?string, reasons: list<string>}>, email_alerts: list<array{row: int, id_number: string, name: string, problem: string}>, fixed: array, file: string}
      */
-    public function import(UploadedFile $file, string $type): array
+    public function import(UploadedFile $file, string $type, array $fixed = []): array
     {
+        $fixed = $type === User::STUDENT ? array_filter($fixed, fn ($v) => filled($v)) : [];
         $default = $this->accounts->defaultPassword();
         if ($default === null) {
             throw ValidationException::withMessages(['file' => 'Set IMPORT_DEFAULT_PASSWORD in .env first (8+ characters with upper and lower case letters, a number and a symbol). Imported accounts get that password.']);
@@ -95,7 +99,7 @@ class UserImportService
 
         $import = new UsersImport;
         Excel::import($import, $file);
-        [$headerLine, $map, $rows] = $this->readSheet($import->rows, $type);
+        [$headerLine, $map, $rows] = $this->readSheet($import->rows, $type, array_keys($fixed));
 
         if ($rows->count() > self::MAX_ROWS) {
             throw ValidationException::withMessages(['file' => 'The file has '.number_format($rows->count()).' rows. Import at most '.number_format(self::MAX_ROWS).' at a time.']);
@@ -105,15 +109,24 @@ class UserImportService
         $seenIds = [];
         $seenEmails = [];
         $skipped = [];
+        $emailAlerts = [];
         $created = collect();
 
-        DB::transaction(function () use ($rows, $map, $type, $headerLine, $hash, &$seenIds, &$seenEmails, &$skipped, $created) {
+        DB::transaction(function () use ($rows, $map, $type, $fixed, $headerLine, $hash, &$seenIds, &$seenEmails, &$skipped, &$emailAlerts, $created) {
             foreach ($rows as $offset => $cells) {
                 $line = $headerLine + 1 + $offset;
-                [$data, $infoProblems] = $this->rowData($cells, $map, $type);
+                [$data, $infoProblems] = $this->rowData($cells, $map, $type, $fixed);
 
-                if (collect($data)->except('role')->filter(fn ($v) => $v !== null)->isEmpty()) {
-                    continue; // blank line
+                if (collect($cells)->every(fn ($c) => trim((string) $c) === '')) {
+                    continue; // blank line (checked on the file's cells, not the values chosen on the page)
+                }
+
+                // FR-ADM-17: an email that isn't a valid @school address doesn't stop the import: the account
+                // is saved without it and listed in the email alert.
+                $emailProblem = null;
+                if ($data['email'] !== null && Validator::make(['email' => $data['email']], ['email' => ['email', 'max:255', new SchoolEmail]])->fails()) {
+                    $emailProblem = '"'.$data['email'].'" isn\'t a valid @'.config('app.allowed_email_domain').' address, so it was left out.';
+                    $data['email'] = null;
                 }
 
                 $reasons = [...$infoProblems, ...$this->problems($data, $seenIds, $seenEmails)];
@@ -134,6 +147,11 @@ class UserImportService
                     $seenEmails[$data['email']] = $line; // blank emails are never duplicates
                 }
                 $created->push($user);
+
+                if ($data['email'] === null) {
+                    $emailAlerts[] = ['row' => $line, 'id_number' => $user->id_number, 'name' => $user->name,
+                        'problem' => $emailProblem ?? 'No email in the file.'];
+                }
             }
         });
 
@@ -142,13 +160,17 @@ class UserImportService
             'type' => $type,
             'imported' => $created->count(),
             'skipped' => $skipped,
+            'email_alerts' => $emailAlerts,
+            'fixed' => $fixed,
             'file' => $file->getClientOriginalName(),
         ];
 
         // FR-LOG-02: one entry per import, with the type and the counts.
         Audit::log(Audit::USERS_IMPORTED,
             $label.' import from '.$result['file'].': '.$result['imported'].' '.str(mb_strtolower($label))->plural($result['imported']).' imported, '
-                .count($skipped).' '.str('row')->plural(count($skipped)).' skipped',
+                .count($skipped).' '.str('row')->plural(count($skipped)).' skipped'
+                .($emailAlerts ? '; '.count($emailAlerts).' without a school email' : '')
+                .($fixed ? ' (set for every row: '.StudentInfo::full($fixed['course'] ?? null, $fixed['year_level'] ?? null, $fixed['section'] ?? null).')' : ''),
             null,
             [
                 'type' => $type,
@@ -157,6 +179,8 @@ class UserImportService
                 'skipped' => count($skipped),
                 'user_ids' => $created->pluck('id')->all(),
                 'skipped_rows' => array_slice($skipped, 0, 200),
+                'without_school_email' => count($emailAlerts),
+                'fixed' => $fixed,
             ],
         );
 
@@ -168,7 +192,7 @@ class UserImportService
      *
      * @return array{0: int, 1: array<string, int>, 2: Collection<int, array>} heading line, field => column index, data rows
      */
-    private function readSheet(Collection $sheet, string $type): array
+    private function readSheet(Collection $sheet, string $type, array $fixedFields = []): array
     {
         $rows = $sheet->map(fn ($r) => array_values(collect($r)->all()))->values();
         $headerIndex = $rows->search(fn ($cells) => collect($cells)->contains(fn ($c) => trim((string) $c) !== ''));
@@ -193,7 +217,8 @@ class UserImportService
             }
         }
 
-        $missing = collect(self::COLUMNS[$type])->filter(fn ($c, $field) => $c[1] && ! isset($map[$field]))->map(fn ($c) => $c[0]);
+        // A column whose value was chosen on the page (FR-ADM-16) isn't needed in the file.
+        $missing = collect(self::COLUMNS[$type])->filter(fn ($c, $field) => $c[1] && ! isset($map[$field]) && ! in_array($field, $fixedFields, true))->map(fn ($c) => $c[0]);
         if ($missing->isNotEmpty()) {
             $found = collect($headings)->map(fn ($h) => trim((string) $h))->filter(fn ($h) => $h !== '');
             throw ValidationException::withMessages(['file' => 'Missing required '.str('column')->plural($missing->count()).': '
@@ -216,11 +241,11 @@ class UserImportService
      *
      * @return array{0: array<string, mixed>, 1: list<string>}
      */
-    private function rowData(array $cells, array $map, string $type): array
+    private function rowData(array $cells, array $map, string $type, array $fixed = []): array
     {
         $data = ['role' => $type];
         foreach (['id_number', 'name', 'email', 'course', 'year_level', 'section', 'department'] as $field) {
-            $value = isset($map[$field]) ? ($cells[$map[$field]] ?? null) : null;
+            $value = $fixed[$field] ?? (isset($map[$field]) ? ($cells[$map[$field]] ?? null) : null);
             // Excel may hand a number back as 20230001.0; keep it as written.
             if (is_float($value) && floor($value) === $value) {
                 $value = (string) (int) $value;

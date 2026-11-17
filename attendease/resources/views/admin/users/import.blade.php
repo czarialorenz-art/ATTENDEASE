@@ -7,7 +7,7 @@
     $notes = [
         'id_number' => 'must be new; also used to log in',
         'name' => 'given names first, surname last',
-        'email' => 'optional; a new '.'@'.config('app.allowed_email_domain').' address. Without one, the account logs in with its ID number',
+        'email' => 'optional; a new '.'@'.config('app.allowed_email_domain').' address. A blank or non-school email is left out and listed in an alert after the import; the account then logs in with its ID number',
         'course' => $courses,
         'year_level' => '1 to 4 (also "1st", "4th Year")',
         'section' => $sections,
@@ -47,6 +47,34 @@
                 </div>
                 <p class="help mt-2">Fix these rows and import the file again: rows already imported are skipped as duplicates.</p>
             @endif
+
+            @if (! empty($result['fixed']))
+                <p class="mt-3 text-sm text-slate-600">Set for every student: <strong>{{ StudentInfo::full($result['fixed']['course'] ?? null, $result['fixed']['year_level'] ?? null, $result['fixed']['section'] ?? null) }}</strong>.</p>
+            @endif
+
+            {{-- FR-ADM-17: imported, but without a school email --}}
+            @if ($alerts = $result['email_alerts'] ?? [])
+                <div class="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="alert" data-email-alert>
+                    @php($who = count($alerts).' imported '.\Illuminate\Support\Str::plural(mb_strtolower($label), count($alerts)).(count($alerts) === 1 ? ' has' : ' have'))
+                    <p class="font-semibold">{{ $who }} no {{ '@'.config('app.allowed_email_domain') }} email.</p>
+                    <p class="mb-2">They can log in with their ID number. Add their school email in User Management → Edit when you have it.</p>
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead><tr><th>Row</th><th>ID number</th><th>Name</th><th>Email</th></tr></thead>
+                            <tbody>
+                                @foreach ($alerts as $a)
+                                    <tr>
+                                        <td class="font-mono">{{ $a['row'] }}</td>
+                                        <td class="font-mono text-xs whitespace-nowrap">{{ $a['id_number'] }}</td>
+                                        <td class="whitespace-nowrap">{{ $a['name'] }}</td>
+                                        <td>{{ $a['problem'] }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            @endif
         </section>
     @endif
 
@@ -69,6 +97,32 @@
                 @endforeach
             </x-field>
 
+            {{-- FR-ADM-16: course / year level / section for every student row, or from the file --}}
+            <fieldset data-student-only @class(['rounded-lg border border-slate-200 p-4', 'hidden' => $type !== 'student'])>
+                <legend class="px-1 text-sm font-semibold text-slate-700">Students' course, year level and section</legend>
+                <p class="mb-3 text-xs text-slate-500">Pick a value to give it to every student in the file (the file then doesn't need that column), or leave “From the file” to read it per row.</p>
+                <div class="grid gap-3 sm:grid-cols-3">
+                    <x-field name="course" label="Course" type="select" data-fixed="course">
+                        <option value="">From the file</option>
+                        @foreach (StudentInfo::courses() as $code => $name)
+                            <option value="{{ $code }}" title="{{ $name }}" @selected(old('course') === $code)>{{ $code }}</option>
+                        @endforeach
+                    </x-field>
+                    <x-field name="year_level" label="Year level" type="select" data-fixed="year_level">
+                        <option value="">From the file</option>
+                        @foreach (StudentInfo::yearLevels() as $level)
+                            <option value="{{ $level }}" @selected((string) old('year_level') === (string) $level)>{{ StudentInfo::yearLabel($level) }}</option>
+                        @endforeach
+                    </x-field>
+                    <x-field name="section" label="Section" type="select" data-fixed="section">
+                        <option value="">From the file</option>
+                        @foreach (StudentInfo::sections() as $letter)
+                            <option value="{{ $letter }}" @selected(old('section') === $letter)>Section {{ $letter }}</option>
+                        @endforeach
+                    </x-field>
+                </div>
+            </fieldset>
+
             <x-field name="file" label="CSV or Excel file" type="file" accept=".csv,.xlsx,.xls" required help="Up to 5 MB and 2,000 rows. Only the first sheet is read." />
             <button class="btn-primary" @disabled(! $hasDefaultPassword)>Import</button>
         </form>
@@ -86,7 +140,11 @@
                     <p class="mb-2 text-sm text-slate-600">Keep the heading row and add one {{ mb_strtolower($label) }} per row (* = required):</p>
                     <ul class="space-y-1 text-sm text-slate-600">
                         @foreach (Import::COLUMNS[$key] as $field => [$heading, $required])
-                            <li><strong>{{ $heading }}</strong>@if ($required)<span class="text-red-600">*</span>@endif — {{ $notes[$field] }}</li>
+                            <li><strong>{{ $heading }}</strong>@if ($required)<span class="text-red-600" data-required-mark="{{ $field }}">*</span>@endif — {{ $notes[$field] }}
+                                @if ($key === 'student' && in_array($field, ['course', 'year_level', 'section'], true))
+                                    <span class="hidden text-xs font-semibold text-emerald-700" data-fixed-note="{{ $field }}">(set above; not needed in the file)</span>
+                                @endif
+                            </li>
                         @endforeach
                     </ul>
                 </div>
@@ -98,11 +156,24 @@
 
     @push('scripts')
     <script>
-        // Show the template and columns for the chosen type only.
+        // Show the template, columns and student-only dropdowns for the chosen type only.
         document.querySelector('[data-import-type]')?.addEventListener('change', (e) => {
             document.querySelectorAll('[data-template-for]').forEach((el) => {
                 el.classList.toggle('hidden', el.dataset.templateFor !== e.target.value);
             });
+            document.querySelector('[data-student-only]')?.classList.toggle('hidden', e.target.value !== 'student');
+        });
+
+        // A course / year level / section chosen above isn't needed in the file: say so next to the column.
+        const markFixed = (select) => {
+            const field = select.dataset.fixed;
+            const fixed = select.value !== '';
+            document.querySelector(`[data-fixed-note="${field}"]`)?.classList.toggle('hidden', !fixed);
+            document.querySelector(`[data-template-for="student"] [data-required-mark="${field}"]`)?.classList.toggle('hidden', fixed);
+        };
+        document.querySelectorAll('[data-fixed]').forEach((select) => {
+            markFixed(select);
+            select.addEventListener('change', () => markFixed(select));
         });
     </script>
     @endpush

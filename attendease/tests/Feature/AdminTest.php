@@ -348,28 +348,28 @@ class AdminTest extends TestCase
             "2023-00009,Old Person,new@{$d},BSIT,1,A",                    // 5 ID exists
             "2023-00001,Ana Again,ana2@{$d},BSIT,1,A",                    // 6 duplicate ID in file
             ',,,,,',                                                      // 7 blank: ignored
-            '2023-00004,Dan Go,dan@gmail.com,BSIT,1,A',                   // 8 wrong domain
+            '2023-00004,Dan Go,dan@gmail.com,BSIT,1,A',                   // 8 non-school email: imported without it, with an alert
             "2023-00005,,dina@{$d},BSIT,1,A",                             // 9 no name
             "2023-00006,Eli Tan,eli@{$d},BSCS,5,E",                       // 10 course, year, section not in the lists
             '2023-00007,Fe Ong,,BSIT,,C',                                 // 11 year level missing
             "2023-00008,Gia Lee,ANA@{$d},BSIT,1,A",                       // 12 duplicate email in file (any case)
         ]);
 
-        $this->import('student', $file)->assertRedirect(route('admin.users.import'))->assertSessionHas('status', '3 imported, 7 skipped.');
+        $this->import('student', $file)->assertRedirect(route('admin.users.import'))->assertSessionHas('status', '4 imported, 6 skipped.');
 
         $ana = User::where('id_number', '2023-00001')->sole();
         $this->assertSame([User::STUDENT, 'BSIT', 3, 'A', 'Ana Cruz'], [$ana->role, $ana->course, $ana->year_level, $ana->section, $ana->name]);
         $this->assertTrue(Hash::check(self::DEFAULT_PASSWORD, $ana->password));
         $this->assertNull(User::where('id_number', '2023-00002')->value('email'));
         $this->assertSame(['B', 4], [User::where('id_number', '2023-00002')->value('section'), User::where('id_number', '2023-00002')->value('year_level')]);
-        $this->assertSame(2, User::whereNull('email')->count());
+        $this->assertSame(3, User::whereNull('email')->count());
+        $this->assertNull(User::where('id_number', '2023-00004')->value('email'));
 
         $page = $this->actingAs($this->admin)->get('/admin/users/import')->assertOk();
         $skipped = collect($page->viewData('result')['skipped'])->keyBy('row');
-        $this->assertSame([5, 6, 8, 9, 10, 11, 12], $skipped->keys()->all());
+        $this->assertSame([5, 6, 9, 10, 11, 12], $skipped->keys()->all());
         $this->assertSame(['ID number 2023-00009 already belongs to an account.'], $skipped[5]['reasons']);
         $this->assertSame(['Duplicate ID number: same as row 2 of this file.'], $skipped[6]['reasons']);
-        $this->assertSame(['Use your school email address (ending in @'.$d.').'], $skipped[8]['reasons']);
         $this->assertSame(['Name is required.'], $skipped[9]['reasons']);
         $this->assertSame([
             'Course "BSCS" isn\'t in the list (BSIT).',
@@ -378,11 +378,18 @@ class AdminTest extends TestCase
         ], $skipped[10]['reasons']);
         $this->assertSame(['Year Level is required for students.'], $skipped[11]['reasons']);
         $this->assertSame(['Duplicate email: same as row 2 of this file.'], $skipped[12]['reasons']);
-        $page->assertSee('3 imported, 7 skipped')->assertSee('Student import from students.csv');
+        $page->assertSee('4 imported, 6 skipped')->assertSee('Student import from students.csv');
+
+        // FR-ADM-17: imported without a school email, listed in an alert.
+        $alerts = collect($page->viewData('result')['email_alerts']);
+        $this->assertSame([3, 4, 8], $alerts->pluck('row')->all());
+        $this->assertSame('No email in the file.', $alerts[0]['problem']);
+        $this->assertSame('"dan@gmail.com" isn\'t a valid @'.$d.' address, so it was left out.', $alerts[2]['problem']);
+        $page->assertSee('data-email-alert', false)->assertSee('3 imported students have no @'.$d.' email.')->assertSee('Dan Go');
 
         $log = Activity::where('event', Audit::USERS_IMPORTED)->sole();
-        $this->assertSame('Student import from students.csv: 3 students imported, 7 rows skipped', $log->description);
-        $this->assertSame(['student', 3, 7], [$log->getProperty('type'), $log->getProperty('imported'), $log->getProperty('skipped')]);
+        $this->assertSame('Student import from students.csv: 4 students imported, 6 rows skipped; 3 without a school email', $log->description);
+        $this->assertSame(['student', 4, 6], [$log->getProperty('type'), $log->getProperty('imported'), $log->getProperty('skipped')]);
         $this->assertSame($this->admin->id, $log->causer_id);
     }
 
@@ -400,7 +407,42 @@ class AdminTest extends TestCase
         $ben = User::where('id_number', 'T-001')->sole();
         $this->assertSame([User::TEACHER, 'CCS', null], [$ben->role, $ben->department, $ben->course]);
         $this->assertSame(User::TEACHER, User::where('id_number', 'T-002')->value('role'));
-        $this->assertSame('Teacher import from teachers.xlsx.csv: 2 teachers imported, 0 rows skipped', Activity::where('event', Audit::USERS_IMPORTED)->sole()->description);
+        $this->assertSame('Teacher import from teachers.xlsx.csv: 2 teachers imported, 0 rows skipped; 1 without a school email', Activity::where('event', Audit::USERS_IMPORTED)->sole()->description);
+    }
+
+    /** FR-ADM-16: course / year level / section chosen on the page apply to every row. */
+    public function test_student_import_can_set_course_year_and_section_for_every_row(): void
+    {
+        $d = config('app.allowed_email_domain');
+        $file = $this->csv(['ID Number,Name,Email', "S-1,Ana Cruz,ana@{$d}", 'S-2,Ben Lim,', ',,']);
+
+        // Without the dropdowns, those columns are required.
+        $this->import('student', $file)->assertSessionHasErrors('file');
+
+        $this->actingAs($this->admin)->post('/admin/users/import', ['type' => 'student', 'course' => 'BSIT', 'year_level' => 4, 'section' => 'B', 'file' => $file])
+            ->assertSessionHas('status', '2 imported, 0 skipped.');
+        foreach (['S-1', 'S-2'] as $id) {
+            $this->assertSame('BSIT · 4th Year · Section B', User::where('id_number', $id)->sole()->academicLabel());
+        }
+        $this->assertStringContainsString('(set for every row: BSIT · 4th Year · Section B)', Activity::where('event', Audit::USERS_IMPORTED)->sole()->description);
+        $this->actingAs($this->admin)->get('/admin/users/import')->assertSee('Set for every student:');
+
+        // One chosen, the others from the file; a chosen value wins over the column.
+        $file2 = $this->csv(['ID Number,Name,Year Level,Section', 'S-3,Cara Uy,2,C', 'S-4,Dan Go,3,A']);
+        $this->actingAs($this->admin)->post('/admin/users/import', ['type' => 'student', 'course' => 'BSIT', 'section' => 'D', 'file' => $file2])
+            ->assertSessionHas('status', '2 imported, 0 skipped.');
+        $this->assertSame([2, 'D'], [User::where('id_number', 'S-3')->value('year_level'), User::where('id_number', 'S-3')->value('section')]);
+
+        // Only listed values are accepted; teachers ignore them.
+        $this->actingAs($this->admin)->post('/admin/users/import', ['type' => 'student', 'course' => 'BSCS', 'year_level' => 9, 'section' => 'Z', 'file' => $file])
+            ->assertSessionHasErrors(['course', 'year_level', 'section']);
+        $this->actingAs($this->admin)->post('/admin/users/import', ['type' => 'teacher', 'course' => 'BSIT', 'file' => $this->csv(['ID Number,Name', 'T-9,Fe Ong'])]);
+        $this->assertNull(User::where('id_number', 'T-9')->value('course'));
+
+        $this->actingAs($this->admin)->get('/admin/users/import?type=student')
+            ->assertSee('data-student-only class="rounded-lg border border-slate-200 p-4"', false)
+            ->assertSee('<option value="">From the file</option>', false);
+        $this->actingAs($this->admin)->get('/admin/users/import?type=teacher')->assertSee('data-student-only class="rounded-lg border border-slate-200 p-4 hidden"', false);
     }
 
     public function test_import_headings_are_matched_loosely(): void
