@@ -21,8 +21,8 @@
             <x-field name="name" label="Full name" :value="$user->name" required maxlength="255" class="sm:col-span-2"
                 help="Given names first, surname last, e.g. Maria Teresa A. Loreno." />
             <x-field name="id_number" label="ID number" :value="$user->id_number" required maxlength="50" />
-            <x-field name="email" label="School email" type="email" :value="$user->email" required maxlength="255"
-                :help="'Must end in @'.config('app.allowed_email_domain').'.'" />
+            <x-field name="email" label="School email" type="email" :value="$user->email" maxlength="255"
+                :help="'Optional. Must end in @'.config('app.allowed_email_domain').'. Without one, the user logs in with their ID number.'" />
 
             {{-- FR-ADM-08: role --}}
             <div>
@@ -39,11 +39,14 @@
                 @endif
                 @error('role')<p class="error">{{ $message }}</p>@enderror
             </div>
-            <x-field name="section" label="Section" :value="$user->section" maxlength="50" help="Students only, e.g. BSIT-3A." />
-            <x-field name="course" label="Course" :value="$user->course" maxlength="255" />
-            <x-field name="year" label="Year level" :value="$user->year" maxlength="50" />
-            <x-field name="department" label="Department" :value="$user->department" maxlength="255" class="sm:col-span-2" help="Teachers only." />
+            <x-field name="department" label="Department" :value="$user->department" maxlength="255" help="Teachers only." />
         </div>
+
+        {{-- FR-ADM-10 --}}
+        <fieldset class="border-t border-slate-100 pt-5">
+            <legend class="mb-3 text-sm font-semibold text-slate-700">Student details <span class="font-normal text-slate-500">(required for students; cleared for other roles)</span></legend>
+            <x-student-info-fields :user="$user" />
+        </fieldset>
 
         <div class="border-t border-slate-100 pt-5">
             <x-field name="password" :label="$editing ? 'New password' : 'Password'" type="password" autocomplete="new-password" :rules="true"

@@ -23,7 +23,7 @@
             <select id="student-section" name="section" class="input">
                 <option value="">All sections</option>
                 @foreach ($sections as $s)
-                    <option value="{{ $s }}" @selected(strcasecmp($section, $s) === 0)>Section {{ $s }}</option>
+                    <option value="{{ $s }}" @selected(strcasecmp($section, $s) === 0)>{{ $s }}</option>
                 @endforeach
                 @if ($hasNoSection)
                     <option value="{{ EnrollmentController::NO_SECTION }}" @selected($section === EnrollmentController::NO_SECTION)>No section</option>
@@ -48,7 +48,7 @@
                             {{ $e->student->listName() }}
                             @include('classes._section-badge', ['student' => $e->student])
                         </div>
-                        <div class="text-xs text-slate-500">{{ $e->student->id_number }} · {{ $e->student->email }} · {{ $e->updated_at->diffForHumans() }}</div>
+                        <div class="text-xs text-slate-500">{{ $e->student->id_number }}{{ $e->student->email ? ' · '.$e->student->email : '' }} · {{ $e->updated_at->diffForHumans() }}</div>
                     </div>
                     <div class="flex gap-2">
                         <form method="POST" action="{{ route('enrollments.approve', $e) }}">@csrf<button class="btn-success btn-sm">Approve</button></form>
@@ -73,7 +73,7 @@
                             {{ $e->student->listName() }}
                             @include('classes._section-badge', ['student' => $e->student])
                         </div>
-                        <div class="text-xs text-slate-500">{{ $e->student->id_number }} · {{ $e->student->email }}</div>
+                        <div class="text-xs text-slate-500">{{ $e->student->id_number }}{{ $e->student->email ? ' · '.$e->student->email : '' }}</div>
                     </div>
                     <form method="POST" action="{{ route('enrollments.remove', $e) }}" data-confirm="Remove {{ $e->student->name }} from this class? Their past records are kept.">
                         @csrf<button class="btn-secondary btn-sm text-red-600">Remove</button>
@@ -86,7 +86,7 @@
             @if ($removed->isNotEmpty())
                 <h3 class="mt-5 mb-1 text-sm font-semibold text-slate-600">Removed</h3>
                 @foreach ($removed as $e)
-                    <div class="text-sm text-slate-500">{{ $e->student->listName() }} · {{ $e->student->id_number }}{{ filled($e->student->section) ? ' · Section '.$e->student->section : '' }}</div>
+                    <div class="text-sm text-slate-500">{{ $e->student->listName() }} · {{ $e->student->id_number }}{{ ($code = $e->student->sectionCode()) ? ' · '.$code : '' }}</div>
                 @endforeach
             @endif
         </section>

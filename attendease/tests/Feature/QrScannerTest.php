@@ -25,18 +25,19 @@ class QrScannerTest extends TestCase
             ->assertSee('playsinline', false);
     }
 
-    public function test_scanner_is_linked_from_top_bar_and_student_dashboard(): void
+    /** Students scan from the top bar's Scan QR button; the dashboard has no separate scan card. */
+    public function test_scanner_is_linked_from_the_top_bar_only(): void
     {
         $class = $this->makeClass();
         $student = $this->enroll($class);
 
-        $this->actingAs($student)->get('/dashboard')->assertOk()
-            ->assertSee('href="'.route('scanner').'"', false)
-            ->assertSee('Open the camera and scan the code');
-
-        // Someone in no classes still gets the top-bar button, but not the dashboard card.
-        $this->actingAs(User::factory()->create())->get('/dashboard')
-            ->assertSee('Scan QR')->assertDontSee('Open the camera and scan the code');
+        foreach ([$student, User::factory()->create()] as $user) { // in a class, and in none
+            $this->actingAs($user)->get('/dashboard')->assertOk()
+                ->assertSee('Scan QR')
+                ->assertSee('href="'.route('scanner').'"', false)
+                ->assertDontSee('Open the camera and scan the code');
+        }
+        $this->actingAs($student)->get('/scanner')->assertOk();
     }
 
     public function test_expired_code_offers_scan_again(): void

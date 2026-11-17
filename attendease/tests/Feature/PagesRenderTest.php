@@ -46,7 +46,7 @@ class PagesRenderTest extends TestCase
         }
 
         $studentPages = [
-            '/dashboard' => 'Scan attendance QR',
+            '/dashboard' => 'Join a class',
             "/classes/{$class->id}" => 'My attendance this semester',
             '/scanner' => 'Scan attendance QR',
             '/my/attendance' => 'My attendance',

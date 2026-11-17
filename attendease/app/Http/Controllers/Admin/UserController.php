@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\UserAccountService;
+use App\Support\StudentInfo;
 use App\Support\Audit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -22,38 +23,88 @@ class UserController extends Controller
     /** Fields shown in "User edited" details, in this order. */
     private const LOGGED_FIELDS = [
         'name' => 'Name', 'id_number' => 'ID number', 'email' => 'Email',
-        'course' => 'Course', 'year' => 'Year', 'section' => 'Section', 'department' => 'Department',
+        'course' => 'Course', 'year_level' => 'Year level', 'section' => 'Section', 'department' => 'Department',
     ];
 
     public function __construct(private UserAccountService $accounts) {}
 
+    /** Value of ?section= for students without a section (only on a year tab). */
+    public const NO_SECTION = '__none';
+
+    /**
+     * FR-ADM-11: the tabs above the table, tab key => label, role and year level.
+     *
+     * @return array<string, array{label: string, role: ?string, year: ?int}>
+     */
+    public static function tabs(): array
+    {
+        $tabs = ['all' => ['label' => 'All', 'role' => null, 'year' => null]];
+        foreach (StudentInfo::yearLevels() as $year) {
+            $tabs['year'.$year] = ['label' => StudentInfo::yearLabel($year), 'role' => User::STUDENT, 'year' => $year];
+        }
+        $tabs['teachers'] = ['label' => 'Teachers', 'role' => User::TEACHER, 'year' => null];
+
+        return $tabs;
+    }
+
     public function index(Request $request)
     {
+        $tabs = self::tabs();
         $filters = $request->validate([
             'q' => ['nullable', 'string', 'max:100'],
             'role' => ['nullable', Rule::in(array_keys(User::ROLES))],
             'status' => ['nullable', Rule::in(array_keys(self::STATUSES))],
+            'tab' => ['nullable', Rule::in(array_keys($tabs))],
+            'section' => ['nullable', Rule::in([...StudentInfo::sections(), self::NO_SECTION])],
         ]);
         $search = trim((string) ($filters['q'] ?? ''));
+        $tab = $filters['tab'] ?? 'all';
+        $year = $tabs[$tab]['year'];
+        $section = $year ? ($filters['section'] ?? '') : ''; // the Section filter belongs to a year tab
 
-        $users = User::query()
+        // Search, role and status: shared by the table and the tab counts.
+        $filtered = fn () => User::query()
             ->when($search !== '', function ($q) use ($search) {
                 $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], mb_strtolower($search)).'%';
                 $q->where(fn ($w) => $w->whereRaw('lower(name) like ?', [$like])->orWhereRaw('lower(id_number) like ?', [$like]));
             })
             ->when($filters['role'] ?? null, fn ($q, $role) => $q->where('role', $role))
             ->when(($filters['status'] ?? null) === 'active', fn ($q) => $q->whereNull('deactivated_at'))
-            ->when(($filters['status'] ?? null) === 'deactivated', fn ($q) => $q->whereNotNull('deactivated_at'))
+            ->when(($filters['status'] ?? null) === 'deactivated', fn ($q) => $q->whereNotNull('deactivated_at'));
+
+        // Every tab's count in one query, using the same search, role and status filters.
+        $countQuery = $filtered()->toBase()->selectRaw('count(*) as tab_all');
+        foreach ($tabs as $key => $t) {
+            if ($key !== 'all') {
+                $countQuery->selectRaw(
+                    'sum(case when role = ?'.($t['year'] ? ' and year_level = ?' : '').' then 1 else 0 end) as tab_'.$key,
+                    $t['year'] ? [$t['role'], $t['year']] : [$t['role']],
+                );
+            }
+        }
+        $row = $countQuery->first();
+        $counts = collect($tabs)->map(fn ($t, $key) => (int) ($row->{'tab_'.$key} ?? 0));
+
+        $users = $filtered()
+            ->when($tabs[$tab]['role'], fn ($q, $role) => $q->where('role', $role))
+            ->when($year, fn ($q) => $q->where('year_level', $year))
+            ->when($section === self::NO_SECTION, fn ($q) => $q->whereNull('section'))
+            ->when($section !== '' && $section !== self::NO_SECTION, fn ($q) => $q->where('section', $section))
             ->orderBy('name')
             ->paginate(self::PER_PAGE)
-            ->withQueryString();
+            ->withQueryString(); // keeps the tab, section, search and filters on every page link
 
         return view('admin.users.index', [
             'users' => $users,
+            'tabs' => $tabs,
+            'tab' => $tab,
+            'counts' => $counts,
+            'year' => $year,
+            'section' => $section,
             'search' => $search,
             'role' => $filters['role'] ?? '',
             'status' => $filters['status'] ?? '',
-            'filtering' => $search !== '' || filled($filters['role'] ?? null) || filled($filters['status'] ?? null),
+            'filtering' => $search !== '' || filled($filters['role'] ?? null) || filled($filters['status'] ?? null) || $section !== '',
         ]);
     }
 
@@ -80,9 +131,10 @@ class UserController extends Controller
             $user = new User(collect($data)->except(['role', 'password'])->all());
             $user->password = $data['password'] ?? $default;
             $user->role = $data['role'];
+            $this->keepStudentInfoForStudentsOnly($user);
             $user->save();
 
-            Audit::log(Audit::USER_ADDED, 'Added '.$user->roleLabel().' '.Audit::who($user).' · '.$user->email
+            Audit::log(Audit::USER_ADDED, 'Added '.$user->roleLabel().' '.Audit::who($user).' · '.($user->email ?? 'no email')
                 .(isset($data['password']) ? '' : ' (default password)'), $user, ['role' => $user->role]);
 
             return $user;
@@ -104,6 +156,10 @@ class UserController extends Controller
     {
         $request->merge($this->accounts->normalize($request->all()));
         $self = $request->user()->is($user);
+        if ($self) {
+            // Your own role can't change, so "required for students" is checked against your real role.
+            $request->merge(['role' => $user->role]);
+        }
 
         $data = $request->validate([
             ...$this->accounts->rules($user),
@@ -120,6 +176,7 @@ class UserController extends Controller
             if (! $self) {
                 $user->role = $data['role'];
             }
+            $this->keepStudentInfoForStudentsOnly($user);
             if (filled($data['password'] ?? null)) {
                 $user->password = $data['password'];
             }
@@ -154,6 +211,19 @@ class UserController extends Controller
         }
 
         return redirect()->route('admin.users.index')->with('status', $user->name.' was updated.');
+    }
+
+    /**
+     * FR-ADM-10: course, year level and section belong to students. Saving from the form also
+     * clears the old free-text year, so a hand-fixed student counts as converted.
+     */
+    private function keepStudentInfoForStudentsOnly(User $user): void
+    {
+        $user->year = null;
+
+        if (! $user->isStudent()) {
+            $user->course = $user->year_level = $user->section = null;
+        }
     }
 
     public function deactivate(Request $request, User $user)

@@ -25,7 +25,7 @@ class EnsureUserIsActive
                 abort(401, 'Your account has been deactivated.');
             }
 
-            return redirect()->route('login')->withErrors(['email' => 'Your account has been deactivated. Contact the administrator.']);
+            return redirect()->route('login')->withErrors(['login' => 'Your account has been deactivated. Contact the administrator.']);
         }
 
         return $next($request);

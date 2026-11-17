@@ -6,16 +6,16 @@
             @csrf @method('PUT')
             <x-field name="name" label="Full Name" :value="$user->name" required />
             <div class="grid gap-4 sm:grid-cols-2">
-                <x-field name="email" label="School Email" type="email" :value="$user->email" required
-                    :help="'Must end in @'.config('app.allowed_email_domain').'. Changing it alerts both addresses.'" />
+                <x-field name="email" label="School Email" type="email" :value="$user->email"
+                    :help="'Optional. Must end in @'.config('app.allowed_email_domain').'. Needed for email alerts and Forgot password.'" />
                 <x-field name="id_number" label="ID Number" :value="$user->id_number" required />
             </div>
-            <div class="grid gap-4 sm:grid-cols-2">
-                <x-field name="course" label="Course" :value="$user->course" placeholder="Optional" />
+            @if ($user->isStudent())
+                {{-- FR-ADM-10: the same fixed lists as the admin uses --}}
+                <x-student-info-fields :user="$user" />
+            @else
                 <x-field name="department" label="Department" :value="$user->department" placeholder="Optional" />
-                <x-field name="year" label="Year" :value="$user->year" placeholder="Optional" />
-                <x-field name="section" label="Section" :value="$user->section" placeholder="Optional" />
-            </div>
+            @endif
             <div class="flex justify-end gap-2">
                 <a href="{{ route('password.edit') }}" class="btn-secondary">Change password</a>
                 <button class="btn-primary">Save profile</button>

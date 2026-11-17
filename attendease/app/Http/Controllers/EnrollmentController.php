@@ -37,30 +37,30 @@ class EnrollmentController extends Controller
             ->sortBy(fn ($e) => $e->student->surnameSortKey(), SORT_NATURAL) // by surname
             ->values();
 
-        // Sections that actually occur among this class's students, for the dropdown.
-        // "B" and "b" are one section; show the capitalised spelling.
-        $sections = $all->map(fn ($e) => trim((string) $e->student->section))
+        // Sections that actually occur among this class's students (e.g. "BSIT 4-B", FR-ADM-10), for the dropdown.
+        // Spellings that differ only in case are one section.
+        $sections = $all->map(fn ($e) => trim((string) $e->student->sectionCode()))
             ->filter()
             ->groupBy(fn ($s) => Str::lower($s))
             ->map(fn ($spellings) => $spellings->unique()->sort()->first())
             ->sort(SORT_NATURAL | SORT_FLAG_CASE)->values();
-        $hasNoSection = $all->contains(fn ($e) => blank($e->student->section));
+        $hasNoSection = $all->contains(fn ($e) => blank($e->student->sectionCode()));
 
         $needle = Str::lower($search);
         $filtered = $all->filter(function ($e) use ($needle, $section) {
             $s = $e->student;
 
-            if ($section === self::NO_SECTION && filled($s->section)) {
+            if ($section === self::NO_SECTION && filled($s->sectionCode())) {
                 return false;
             }
-            if ($section !== '' && $section !== self::NO_SECTION && Str::lower(trim((string) $s->section)) !== Str::lower($section)) {
+            if ($section !== '' && $section !== self::NO_SECTION && Str::lower(trim((string) $s->sectionCode())) !== Str::lower($section)) {
                 return false;
             }
 
             return $needle === ''
                 || Str::contains(Str::lower($s->name), $needle)
                 || Str::contains(Str::lower((string) $s->id_number), $needle)
-                || Str::contains(Str::lower($s->email), $needle);
+                || Str::contains(Str::lower((string) $s->email), $needle);
         });
 
         return view('classes.students', [

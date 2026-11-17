@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Notifications\ResetPasswordNotification;
+use App\Support\StudentInfo;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -28,7 +29,7 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'name', 'id_number', 'email', 'password',
-        'course', 'year', 'section', 'department',
+        'course', 'year_level', 'section', 'department',
     ];
 
     protected $hidden = ['password', 'remember_token'];
@@ -40,6 +41,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'deactivated_at' => 'datetime',
+            'year_level' => 'integer',
             'password' => 'hashed',
         ];
     }
@@ -67,6 +69,40 @@ class User extends Authenticatable
     public function roleLabel(): string
     {
         return self::ROLES[$this->role] ?? ucfirst((string) $this->role);
+    }
+
+    /**
+     * FR-ADM-10: true while the student still has old free-text values that the conversion
+     * command couldn't turn into a course code, year level and section letter.
+     */
+    public function needsInfoUpdate(): bool
+    {
+        return filled($this->year)
+            || (filled($this->course) && ! array_key_exists($this->course, StudentInfo::courses()))
+            || (filled($this->section) && ! in_array($this->section, StudentInfo::sections(), true));
+    }
+
+    /** The old typed values, e.g. "Course: BS IT · Year: 4TH · Section: Section 4-B". */
+    public function legacyInfo(): string
+    {
+        return collect(['Course' => $this->course, 'Year' => $this->year, 'Section' => $this->section])
+            ->filter(fn ($v) => filled($v))->map(fn ($v, $k) => $k.': '.$v)->implode(' · ');
+    }
+
+    /** "BSIT · 4th Year · Section B", shown under the name. */
+    public function academicLabel(): ?string
+    {
+        return $this->needsInfoUpdate() ? null : StudentInfo::full($this->course, $this->year_level, $this->section);
+    }
+
+    /** "BSIT 4-B" for badges and the report. Not-yet-converted students show their old section text. */
+    public function sectionCode(): ?string
+    {
+        if ($this->needsInfoUpdate()) {
+            return filled($this->section) ? trim($this->section) : null;
+        }
+
+        return StudentInfo::compact($this->course, $this->year_level, $this->section);
     }
 
     /** FR-ADM-07: deactivated accounts can't log in (and are logged out of open sessions). */

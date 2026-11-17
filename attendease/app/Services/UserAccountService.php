@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\User;
 use App\Rules\SchoolEmail;
+use App\Support\StudentInfo;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -33,20 +34,34 @@ class UserAccountService
         return [
             'name' => ['required', 'string', 'max:255'],
             'id_number' => ['required', 'string', 'max:50', Rule::unique('users', 'id_number')->ignore($ignore?->id)],
-            'email' => ['required', 'string', 'email', 'max:255', new SchoolEmail, Rule::unique('users', 'email')->ignore($ignore?->id)],
-            'course' => ['nullable', 'string', 'max:255'],
-            'year' => ['nullable', 'string', 'max:50'],
-            'section' => ['nullable', 'string', 'max:50'],
+            // FR-ADM-13: optional; when given, a unique school address. Blank is stored as NULL, so it is never a duplicate.
+            'email' => ['nullable', 'string', 'email', 'max:255', new SchoolEmail, Rule::unique('users', 'email')->ignore($ignore?->id)],
+            ...$this->studentInfoRules(),
             'department' => ['nullable', 'string', 'max:255'],
         ];
     }
 
-    public const ATTRIBUTE_NAMES = ['id_number' => 'ID number', 'name' => 'full name', 'email' => 'email'];
+    /**
+     * FR-ADM-10: course, year level and section come from the fixed lists in config/students.php.
+     * With $requiredForStudents, a Student account must have all three (the role must be in the same input).
+     */
+    public function studentInfoRules(bool $requiredForStudents = true): array
+    {
+        $required = $requiredForStudents ? 'required_if:role,'.User::STUDENT : 'nullable';
+
+        return [
+            'course' => [$required, 'nullable', Rule::in(array_keys(StudentInfo::courses()))],
+            'year_level' => [$required, 'nullable', 'integer', Rule::in(StudentInfo::yearLevels())],
+            'section' => [$required, 'nullable', Rule::in(StudentInfo::sections())],
+        ];
+    }
+
+    public const ATTRIBUTE_NAMES = ['id_number' => 'ID number', 'name' => 'full name', 'email' => 'email', 'year_level' => 'year level'];
 
     /** Trims text and lowercases the email, the same way sign-up does. */
     public function normalize(array $input): array
     {
-        foreach (['name', 'id_number', 'email', 'course', 'year', 'section', 'department'] as $key) {
+        foreach (['name', 'id_number', 'email', 'course', 'year_level', 'section', 'department'] as $key) {
             if (array_key_exists($key, $input) && $input[$key] !== null) {
                 $input[$key] = trim((string) $input[$key]);
                 if ($input[$key] === '') {
@@ -56,6 +71,9 @@ class UserAccountService
         }
         if (isset($input['email'])) {
             $input['email'] = mb_strtolower($input['email']);
+        }
+        if (isset($input['section'])) {
+            $input['section'] = mb_strtoupper($input['section']);
         }
 
         return $input;

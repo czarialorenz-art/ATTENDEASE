@@ -66,19 +66,8 @@
 
         {{-- Student side --}}
         @if ($isStudent)
+        {{-- Scanning is from the top bar's Scan QR button. --}}
         <section class="grid items-start gap-6 lg:col-span-2 lg:grid-cols-2">
-            @if ($enrolled->where('status', 'approved')->isNotEmpty())
-                <a href="{{ route('scanner') }}" class="card flex items-center gap-4 border-brand-100 bg-brand-50 hover:bg-brand-100 lg:col-span-2">
-                    <span class="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand-600 text-white">
-                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7V5a1 1 0 011-1h2M17 4h2a1 1 0 011 1v2M20 17v2a1 1 0 01-1 1h-2M7 20H5a1 1 0 01-1-1v-2M8 8h3v3H8zM13 13h3v3h-3zM13 8h3M8 13v3"/></svg>
-                    </span>
-                    <span>
-                        <span class="block font-semibold text-brand-800">Scan attendance QR</span>
-                        <span class="block text-sm text-slate-600">Open the camera and scan the code on your teacher's screen.</span>
-                    </span>
-                </a>
-            @endif
-
             <div class="card">
                 <h2 class="h2 mb-3">Classes I'm in</h2>
                 @forelse ($enrolled as $e)

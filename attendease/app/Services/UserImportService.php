@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Imports\UsersImport;
 use App\Models\User;
 use App\Support\Audit;
+use App\Support\StudentInfo;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -14,27 +15,78 @@ use Illuminate\Validation\ValidationException;
 use Maatwebsite\Excel\Facades\Excel;
 
 /**
- * FR-ADM-09: imports Students and Teachers from CSV/Excel. Each row is checked on its own;
- * invalid rows and duplicates (already in the system, or repeated in the file) are skipped
- * with the reason, and the rest are saved with the hashed default password.
+ * FR-ADM-09: imports Students or Teachers (chosen on the page, not per row) from CSV/Excel.
+ * Each row is checked on its own; invalid rows and duplicates (already in the system, or
+ * repeated in the file) are skipped with the reason, and the rest are saved with the hashed
+ * default password.
  */
 class UserImportService
 {
     public const MAX_ROWS = 2000;
 
-    /** Columns every file must have (headings are matched without case or spacing). */
-    public const REQUIRED_COLUMNS = ['role', 'id_number', 'name', 'email'];
+    public const TYPES = [User::STUDENT => 'Student', User::TEACHER => 'Teacher'];
 
-    public const OPTIONAL_COLUMNS = ['course', 'year', 'section', 'department'];
+    /**
+     * FR-ADM-14: the columns of each import type, in template order: field => [heading, required].
+     *
+     * @var array<string, array<string, array{0: string, 1: bool}>>
+     */
+    public const COLUMNS = [
+        User::STUDENT => [
+            'id_number' => ['ID Number', true],
+            'name' => ['Name', true],
+            'email' => ['Email', false],
+            'course' => ['Course', true],
+            'year_level' => ['Year Level', true],
+            'section' => ['Section', true],
+        ],
+        User::TEACHER => [
+            'id_number' => ['ID Number', true],
+            'name' => ['Name', true],
+            'email' => ['Email', false],
+            'department' => ['Department', false],
+        ],
+    ];
 
-    public const IMPORTABLE_ROLES = [User::STUDENT, User::TEACHER];
+    /**
+     * FR-ADM-15: headings that mean each field, compared after normalizing (no case, dots,
+     * underscores, hyphens, asterisks, brackets or extra spaces): "ID No." = "id_no" = "ID NO".
+     */
+    public const HEADING_ALIASES = [
+        'id_number' => ['id number', 'id no', 'id num', 'id #', 'id', 'id code', 'student id', 'student id number', 'student id no',
+            'student no', 'student number', 'student num', 'teacher id', 'employee id', 'employee no', 'employee number', 'school id', 'id nos'],
+        'name' => ['name', 'full name', 'fullname', 'student name', 'teacher name', 'complete name', 'name of student', 'name of teacher'],
+        'email' => ['email', 'e mail', 'email address', 'e mail address', 'school email', 'school email address'],
+        'course' => ['course', 'program', 'course code', 'degree', 'course program'],
+        'year_level' => ['year level', 'year', 'yr level', 'yr', 'year lvl', 'yr lvl', 'level', 'grade level'],
+        'section' => ['section', 'sec', 'section letter'],
+        'department' => ['department', 'dept', 'college', 'office'],
+    ];
 
     public function __construct(private UserAccountService $accounts) {}
 
+    /** "ID No." / "id_no" / " ID  NO * " → "id no" */
+    public static function normalizeHeading(mixed $heading): string
+    {
+        $h = mb_strtolower((string) $heading);
+        $h = str_replace("\u{FEFF}", '', $h);                 // byte-order mark from some CSV files
+        $h = preg_replace('/\(.*?\)|\[.*?\]/', ' ', $h);     // "Email (optional)"
+        $h = str_replace(['.', '*', ':'], '', $h);
+        $h = str_replace(['_', '-', '/'], ' ', $h);
+
+        return trim(preg_replace('/\s+/', ' ', $h));
+    }
+
+    /** The heading text for the page and the template, e.g. "ID Number*". */
+    public static function headings(string $type, bool $markRequired = false): array
+    {
+        return collect(self::COLUMNS[$type])->map(fn ($c) => $c[0].($markRequired && $c[1] ? '*' : ''))->values()->all();
+    }
+
     /**
-     * @return array{imported: int, students: int, teachers: int, skipped: list<array{row: int, id_number: ?string, reasons: list<string>}>, file: string}
+     * @return array{type: string, imported: int, skipped: list<array{row: int, id_number: ?string, reasons: list<string>}>, file: string}
      */
-    public function import(UploadedFile $file): array
+    public function import(UploadedFile $file, string $type): array
     {
         $default = $this->accounts->defaultPassword();
         if ($default === null) {
@@ -43,9 +95,7 @@ class UserImportService
 
         $import = new UsersImport;
         Excel::import($import, $file);
-        $rows = $import->rows;
-
-        $this->checkColumns($rows);
+        [$headerLine, $map, $rows] = $this->readSheet($import->rows, $type);
 
         if ($rows->count() > self::MAX_ROWS) {
             throw ValidationException::withMessages(['file' => 'The file has '.number_format($rows->count()).' rows. Import at most '.number_format(self::MAX_ROWS).' at a time.']);
@@ -57,16 +107,16 @@ class UserImportService
         $skipped = [];
         $created = collect();
 
-        DB::transaction(function () use ($rows, $hash, &$seenIds, &$seenEmails, &$skipped, $created) {
-            foreach ($rows as $index => $row) {
-                $line = $index + 2; // row 1 is the headings
-                $data = $this->rowData($row);
+        DB::transaction(function () use ($rows, $map, $type, $headerLine, $hash, &$seenIds, &$seenEmails, &$skipped, $created) {
+            foreach ($rows as $offset => $cells) {
+                $line = $headerLine + 1 + $offset;
+                [$data, $infoProblems] = $this->rowData($cells, $map, $type);
 
-                if (collect($data)->filter(fn ($v) => $v !== null)->isEmpty()) {
+                if (collect($data)->except('role')->filter(fn ($v) => $v !== null)->isEmpty()) {
                     continue; // blank line
                 }
 
-                $reasons = $this->problems($data, $seenIds, $seenEmails);
+                $reasons = [...$infoProblems, ...$this->problems($data, $seenIds, $seenEmails)];
 
                 if ($reasons) {
                     $skipped[] = ['row' => $line, 'id_number' => $data['id_number'], 'reasons' => $reasons];
@@ -76,29 +126,32 @@ class UserImportService
 
                 $user = new User(collect($data)->except('role')->all());
                 $user->password = $hash;
-                $user->role = $data['role'];
+                $user->role = $type;
                 $user->save();
 
                 $seenIds[mb_strtolower($data['id_number'])] = $line;
-                $seenEmails[$data['email']] = $line;
+                if ($data['email'] !== null) {
+                    $seenEmails[$data['email']] = $line; // blank emails are never duplicates
+                }
                 $created->push($user);
             }
         });
 
+        $label = self::TYPES[$type];
         $result = [
+            'type' => $type,
             'imported' => $created->count(),
-            'students' => $created->where('role', User::STUDENT)->count(),
-            'teachers' => $created->where('role', User::TEACHER)->count(),
             'skipped' => $skipped,
             'file' => $file->getClientOriginalName(),
         ];
 
+        // FR-LOG-02: one entry per import, with the type and the counts.
         Audit::log(Audit::USERS_IMPORTED,
-            'Imported '.$result['imported'].' '.str('user')->plural($result['imported'])
-                .' ('.$result['students'].' '.str('student')->plural($result['students']).', '.$result['teachers'].' '.str('teacher')->plural($result['teachers']).')'
-                .' from '.$result['file'].'; '.count($skipped).' '.str('row')->plural(count($skipped)).' skipped',
+            $label.' import from '.$result['file'].': '.$result['imported'].' '.str(mb_strtolower($label))->plural($result['imported']).' imported, '
+                .count($skipped).' '.str('row')->plural(count($skipped)).' skipped',
             null,
             [
+                'type' => $type,
                 'file' => $result['file'],
                 'imported' => $result['imported'],
                 'skipped' => count($skipped),
@@ -110,49 +163,94 @@ class UserImportService
         return $result;
     }
 
-    private function checkColumns(Collection $rows): void
+    /**
+     * Finds the heading row (the first non-empty row) and which column holds each field.
+     *
+     * @return array{0: int, 1: array<string, int>, 2: Collection<int, array>} heading line, field => column index, data rows
+     */
+    private function readSheet(Collection $sheet, string $type): array
     {
-        if ($rows->isEmpty()) {
+        $rows = $sheet->map(fn ($r) => array_values(collect($r)->all()))->values();
+        $headerIndex = $rows->search(fn ($cells) => collect($cells)->contains(fn ($c) => trim((string) $c) !== ''));
+
+        if ($headerIndex === false) {
+            throw ValidationException::withMessages(['file' => 'The file is empty. Download the '.self::TYPES[$type].' template and fill it in.']);
+        }
+
+        $headings = $rows[$headerIndex];
+        $lookup = [];
+        foreach (self::HEADING_ALIASES as $field => $aliases) {
+            foreach ($aliases as $alias) {
+                $lookup[self::normalizeHeading($alias)] = $field;
+            }
+        }
+
+        $map = [];
+        foreach ($headings as $i => $heading) {
+            $field = $lookup[self::normalizeHeading($heading)] ?? null;
+            if ($field && array_key_exists($field, self::COLUMNS[$type]) && ! isset($map[$field])) {
+                $map[$field] = $i; // the first matching column wins
+            }
+        }
+
+        $missing = collect(self::COLUMNS[$type])->filter(fn ($c, $field) => $c[1] && ! isset($map[$field]))->map(fn ($c) => $c[0]);
+        if ($missing->isNotEmpty()) {
+            $found = collect($headings)->map(fn ($h) => trim((string) $h))->filter(fn ($h) => $h !== '');
+            throw ValidationException::withMessages(['file' => 'Missing required '.str('column')->plural($missing->count()).': '
+                .$missing->map(fn ($m) => '"'.$m.'"')->implode(', ').'. '
+                .'Found in your file: '.($found->isEmpty() ? 'no headings' : $found->map(fn ($h) => '"'.$h.'"')->implode(', ')).'. '
+                .'Expected for a '.self::TYPES[$type].' import: '.implode(', ', self::headings($type, true)).' (* = required).']);
+        }
+
+        $data = $rows->slice($headerIndex + 1)->values();
+        if ($data->filter(fn ($cells) => collect($cells)->contains(fn ($c) => trim((string) $c) !== ''))->isEmpty()) {
             throw ValidationException::withMessages(['file' => 'The file has no data rows. Fill in the template below the heading row.']);
         }
 
-        $missing = array_diff(self::REQUIRED_COLUMNS, array_keys($rows->first()->all()));
-        if ($missing) {
-            $names = collect($missing)->map(fn ($c) => '"'.str_replace('_', ' ', ucwords($c, '_')).'"')->implode(', ');
-
-            throw ValidationException::withMessages(['file' => 'Missing column '.$names.'. Download the template and keep its heading row.']);
-        }
+        return [$headerIndex + 1, $map, $data];
     }
 
-    /** @return array<string, ?string> */
-    private function rowData(Collection $row): array
+    /**
+     * The row's values for this import type. For students, course / year level / section are
+     * turned into the fixed values (FR-ADM-10: "4th Year", "Section 4-B" and "bs it" are understood).
+     *
+     * @return array{0: array<string, mixed>, 1: list<string>}
+     */
+    private function rowData(array $cells, array $map, string $type): array
     {
-        $data = [];
-        foreach ([...self::REQUIRED_COLUMNS, ...self::OPTIONAL_COLUMNS] as $column) {
-            $value = $row->get($column);
+        $data = ['role' => $type];
+        foreach (['id_number', 'name', 'email', 'course', 'year_level', 'section', 'department'] as $field) {
+            $value = isset($map[$field]) ? ($cells[$map[$field]] ?? null) : null;
             // Excel may hand a number back as 20230001.0; keep it as written.
             if (is_float($value) && floor($value) === $value) {
                 $value = (string) (int) $value;
             }
-            $data[$column] = $value;
+            $data[$field] = $value;
         }
 
+        $typed = ['course' => $data['course'], 'year_level' => $data['year_level'], 'section' => $data['section']];
         $data = $this->accounts->normalize($data);
-        $data['role'] = $data['role'] !== null ? mb_strtolower(trim((string) $data['role'])) : null;
+        $data['course'] = $data['year_level'] = $data['section'] = null;
+        $problems = [];
 
-        return $data;
+        if ($type === User::STUDENT) {
+            $data['department'] = null;
+            $info = StudentInfo::convert($typed['course'], $typed['year_level'], $typed['section']);
+            $problems = $info['problems'];
+            if (! $problems) {
+                [$data['course'], $data['year_level'], $data['section']] = [$info['course'], $info['year_level'], $info['section']];
+            } else {
+                $data['course'] = $data['year_level'] = $data['section'] = 'invalid'; // already explained; skip the "required" message
+            }
+        }
+
+        return [$data, $problems];
     }
 
     /** @return list<string> the reasons this row can't be imported (empty = OK) */
     private function problems(array $data, array $seenIds, array $seenEmails): array
     {
         $reasons = [];
-
-        if (! in_array($data['role'], self::IMPORTABLE_ROLES, true)) {
-            $reasons[] = $data['role'] === null
-                ? 'Role is required (Student or Teacher).'
-                : 'Role "'.$data['role'].'" isn\'t allowed. Use Student or Teacher.';
-        }
 
         if ($data['id_number'] !== null && isset($seenIds[mb_strtolower($data['id_number'])])) {
             $reasons[] = 'Duplicate ID number: same as row '.$seenIds[mb_strtolower($data['id_number'])].' of this file.';
@@ -162,11 +260,21 @@ class UserImportService
         }
 
         $validator = Validator::make($data, $this->accounts->rules(), [
+            'id_number.required' => 'ID Number is required.',
+            'name.required' => 'Name is required.',
             'id_number.unique' => 'ID number :input already belongs to an account.',
             'email.unique' => 'Email :input already belongs to an account.',
+            'course.required_if' => 'Course is required for students.',
+            'year_level.required_if' => 'Year Level is required for students.',
+            'section.required_if' => 'Section is required for students.',
         ], UserAccountService::ATTRIBUTE_NAMES);
 
         $errors = $validator->errors();
+        foreach (['course', 'year_level', 'section'] as $field) {
+            if ($data[$field] === 'invalid') {
+                $errors->forget($field); // the parser already said what's wrong
+            }
+        }
         // A repeat inside the file is already explained; don't also say the (just imported) row "already belongs to an account".
         foreach (['id_number' => $seenIds, 'email' => $seenEmails] as $field => $seen) {
             $key = $field === 'id_number' ? mb_strtolower((string) $data[$field]) : $data[$field];

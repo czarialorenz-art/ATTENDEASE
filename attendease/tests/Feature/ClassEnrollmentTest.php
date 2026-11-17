@@ -168,24 +168,27 @@ class ClassEnrollmentTest extends TestCase
     public function test_students_page_shows_each_students_section(): void
     {
         $class = $this->makeClass();
-        $this->enroll($class, User::factory()->create(['name' => 'Ana Cruz', 'section' => 'BSIT-2A']));
+        $this->enroll($class, User::factory()->create(['name' => 'Ana Cruz', 'course' => 'BSIT', 'year_level' => 2, 'section' => 'A']));
         $this->enroll($class, User::factory()->create(['name' => 'Ben Lim', 'section' => null]));
-        $this->enroll($class, User::factory()->create(['name' => 'Cara Uy', 'section' => 'BSIT-2C']), Enrollment::PENDING);
+        $this->enroll($class, User::factory()->create(['name' => 'Cara Uy', 'course' => 'BSIT', 'year_level' => 2, 'section' => 'C']), Enrollment::PENDING);
+        $this->enroll($class, User::factory()->create(['name' => 'Dan Go', 'year' => '4TH', 'section' => 'Section 4-B'])); // not converted yet
 
+        // FR-ADM-10: the compact "BSIT 2-A" form; an unconverted student shows the old text.
         $this->actingAs($class->teacher)->get("/classes/{$class->id}/students")->assertOk()
-            ->assertSeeInOrder(['Cruz, Ana', 'Section BSIT-2A'])
+            ->assertSeeInOrder(['Cruz, Ana', 'BSIT 2-A'])
+            ->assertSeeInOrder(['Go, Dan', 'Section 4-B'])
             ->assertSeeInOrder(['Lim, Ben', 'No section'])
-            ->assertSeeInOrder(['Uy, Cara', 'Section BSIT-2C']); // join requests show it too
+            ->assertSeeInOrder(['Uy, Cara', 'BSIT 2-C']); // join requests show it too
     }
 
     public function test_fr_cls_10_students_page_filters_by_section_and_searches_by_name(): void
     {
         $class = $this->makeClass();
-        $this->enroll($class, User::factory()->create(['name' => 'Ana Cruz', 'section' => 'A', 'id_number' => '2023-00011']));
-        $this->enroll($class, User::factory()->create(['name' => 'Ben Lim', 'section' => 'B']));
-        $this->enroll($class, User::factory()->create(['name' => 'Bea Santos', 'section' => 'b'])); // same section, other case
+        $this->enroll($class, User::factory()->create(['name' => 'Ana Cruz', 'course' => 'BSIT', 'year_level' => 1, 'section' => 'A', 'id_number' => '2023-00011']));
+        $this->enroll($class, User::factory()->create(['name' => 'Ben Lim', 'course' => 'BSIT', 'year_level' => 1, 'section' => 'B']));
+        $this->enroll($class, User::factory()->create(['name' => 'Bea Santos', 'course' => 'BSIT', 'year_level' => 1, 'section' => 'B']));
         $this->enroll($class, User::factory()->create(['name' => 'Carl Reyes', 'section' => null]));
-        $this->enroll($class, User::factory()->create(['name' => 'Dina Ong', 'section' => 'A']), Enrollment::PENDING);
+        $this->enroll($class, User::factory()->create(['name' => 'Dina Ong', 'course' => 'BSIT', 'year_level' => 1, 'section' => 'A']), Enrollment::PENDING);
 
         $names = fn (string $query, string $list = 'approved') => $this->actingAs($class->teacher)
             ->get("/classes/{$class->id}/students?{$query}")->assertOk()
@@ -193,20 +196,20 @@ class ClassEnrollmentTest extends TestCase
 
         // Dropdown lists the sections that exist (case-insensitive), plus "No section".
         $page = $this->actingAs($class->teacher)->get("/classes/{$class->id}/students")->assertOk();
-        $this->assertSame(['A', 'B'], $page->viewData('sections')->all());
+        $this->assertSame(['BSIT 1-A', 'BSIT 1-B'], $page->viewData('sections')->all());
         $page->assertSee('All sections')->assertSee('No section')->assertSee('placeholder="Student name, number or email"', false);
 
-        $this->assertSame(['Ana Cruz'], $names('section=A'));
-        $this->assertSame(['Dina Ong'], $names('section=A', 'pending'));            // applies to join requests too
-        $this->assertSame(['Ben Lim', 'Bea Santos'], $names('section=b'));
+        $this->assertSame(['Ana Cruz'], $names('section=BSIT%201-A'));
+        $this->assertSame(['Dina Ong'], $names('section=BSIT%201-A', 'pending'));   // applies to join requests too
+        $this->assertSame(['Ben Lim', 'Bea Santos'], $names('section=bsit%201-b')); // any case
         $this->assertSame(['Carl Reyes'], $names('section=__none'));
         $this->assertSame(['Bea Santos'], $names('q=SANTOS'));                      // name, any case
         $this->assertSame(['Ben Lim'], $names('q=n%20li'));                         // part of a name
         $this->assertSame(['Ana Cruz'], $names('q=00011'));                         // student number
-        $this->assertSame(['Ben Lim'], $names('q=ben&section=B'));                  // both together
+        $this->assertSame(['Ben Lim'], $names('q=ben&section=BSIT%201-B'));         // both together
         $this->assertSame([], $names('q=zzz'));
 
-        $this->actingAs($class->teacher)->get("/classes/{$class->id}/students?section=B")
+        $this->actingAs($class->teacher)->get("/classes/{$class->id}/students?section=BSIT%201-B")
             ->assertSee('2 of 4')->assertSee('Clear');
         $this->actingAs($class->teacher)->get("/classes/{$class->id}/students?q=zzz")
             ->assertSee('No students match your search.');

@@ -31,7 +31,8 @@ abstract class ClassNotification extends Notification implements ShouldQueue
 
     public function via(object $notifiable): array
     {
-        return ['database', 'mail'];
+        // No email on the account (FR-ADM-13): in-app only.
+        return filled($notifiable->email ?? null) ? ['database', 'mail'] : ['database'];
     }
 
     public function viaConnections(): array

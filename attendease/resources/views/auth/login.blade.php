@@ -3,7 +3,8 @@
 
     <form method="POST" action="{{ route('login') }}" class="space-y-4" novalidate>
         @csrf
-        <x-field name="email" label="School Email" type="email" autocomplete="email" inputmode="email" required autofocus />
+        <x-field name="login" label="ID Number or School Email" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus
+            help="Accounts without an email log in with their ID number." />
         <x-field name="password" label="Password" type="password" autocomplete="current-password" required />
 
         <div class="flex items-center justify-between text-sm">

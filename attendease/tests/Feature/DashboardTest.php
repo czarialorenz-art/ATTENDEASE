@@ -70,7 +70,10 @@ class DashboardTest extends TestCase
 
         $page = $this->actingAs($student)->get('/dashboard')->assertOk();
         $this->assertSame(['Week 3', 'Later Today'], $page->viewData('myTodaySessions')->pluck('title')->all());
-        $page->assertSeeInOrder(['Scan attendance QR', "Classes I'm in", 'id="my-today-sessions"', 'Week 3', 'Later Today'], false)
+        $page->assertSeeInOrder(["Classes I'm in", 'id="my-today-sessions"', 'Week 3', 'Later Today'], false)
+            // The "Scan attendance QR" card is gone; scanning is from the top bar's Scan QR button.
+            ->assertDontSee("Open the camera and scan the code on your teacher's screen.", false)
+            ->assertSee('href="'.route('scanner').'" class="flex items-center gap-1.5', false)->assertSee('Scan QR')
             ->assertSee('Scan Time In')->assertDontSee('Finished')->assertDontSee('Other Class')
             ->assertSee('data-refresh-url="'.route('dashboard.today.student').'"', false);
 

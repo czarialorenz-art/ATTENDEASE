@@ -68,7 +68,7 @@
                         <td>{{ $i + 1 }}</td>
                         <td>{{ $r['student']->id_number }}</td>
                         <td class="name">{{ $r['student']->listName() }}{{ $r['removed'] ? ' (removed)' : '' }}</td>
-                        <td>{{ $r['student']->section ?: '—' }}</td>
+                        <td>{{ $r['student']->sectionCode() ?? '—' }}</td>
                         @foreach ($block as $col)
                             @php($mark = $r['marks'][$col['id']])
                             <td class="m m-{{ $mark }}">{{ $mark }}</td>

@@ -128,8 +128,8 @@ Route::middleware(['auth', 'auth.session', 'role:admin'])->prefix('admin')->name
     Route::post('/users', [AdminUserController::class, 'store'])->name('users.store');
     Route::get('/users/import', [UserImportController::class, 'create'])->name('users.import');
     Route::post('/users/import', [UserImportController::class, 'store'])->name('users.import.store');
-    Route::get('/users/import/template.{format}', [UserImportController::class, 'template'])
-        ->whereIn('format', ['xlsx', 'csv'])->name('users.import.template');
+    Route::get('/users/import/template/{type}.{format}', [UserImportController::class, 'template'])
+        ->whereIn('type', ['student', 'teacher'])->whereIn('format', ['xlsx', 'csv'])->name('users.import.template');
     Route::get('/users/{user}/edit', [AdminUserController::class, 'edit'])->name('users.edit');
     Route::put('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
     Route::post('/users/{user}/deactivate', [AdminUserController::class, 'deactivate'])->name('users.deactivate');

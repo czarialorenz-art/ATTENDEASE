@@ -4,15 +4,15 @@ namespace App\Imports;
 
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\ToCollection;
-use Maatwebsite\Excel\Concerns\WithHeadingRow;
 
 /**
- * FR-ADM-09: reads the first sheet of the uploaded CSV/Excel file. Row 1 holds the headings
- * ("ID Number" becomes id_number); the rows are checked and saved by UserImportService.
+ * FR-ADM-09: reads the first sheet of the uploaded CSV/Excel file as raw rows. The heading
+ * row is found and matched by UserImportService (FR-ADM-15: forgiving heading names), which
+ * also checks and saves the rows.
  */
-class UsersImport implements ToCollection, WithHeadingRow
+class UsersImport implements ToCollection
 {
-    /** @var Collection<int, Collection<string, mixed>> */
+    /** @var Collection<int, Collection<int, mixed>> */
     public Collection $rows;
 
     public function __construct()

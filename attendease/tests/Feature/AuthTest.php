@@ -128,12 +128,12 @@ class AuthTest extends TestCase
         $user = User::factory()->create();
 
         for ($i = 0; $i < 5; $i++) {
-            $this->post('/login', ['email' => $user->email, 'password' => 'wrong'])->assertSessionHasErrors('email');
+            $this->post('/login', ['email' => $user->email, 'password' => 'wrong'])->assertSessionHasErrors('login');
         }
 
         // Even the right password is refused while blocked.
         $this->post('/login', ['email' => strtoupper($user->email), 'password' => 'password'])
-            ->assertSessionHasErrors(['email' => 'Too many login attempts. Try again in 60 seconds.']);
+            ->assertSessionHasErrors(['login' => 'Too many login attempts. Try again in 60 seconds.']);
         $this->assertGuest();
 
         $this->travel(61)->seconds();
@@ -162,7 +162,7 @@ class AuthTest extends TestCase
     {
         $user = User::factory()->create();
 
-        $same = ['email' => 'These credentials do not match our records.'];
+        $same = ['login' => 'These credentials do not match our records.'];
 
         $this->post('/login', ['email' => $user->email, 'password' => 'wrong'])->assertSessionHasErrors($same);
         $this->post('/login', ['email' => 'nobody@mqcqc.ph.education', 'password' => 'wrong'])->assertSessionHasErrors($same);
@@ -344,7 +344,7 @@ class AuthTest extends TestCase
         $this->assertDatabaseHas('users', ['id' => $user->id, 'name' => 'New Name', 'course' => 'BSIT', 'department' => null]);
 
         $this->actingAs($user)->put('/profile', ['name' => '', 'email' => '', 'id_number' => ''])
-            ->assertSessionHasErrors(['name', 'email', 'id_number']);
+            ->assertSessionHasErrors(['name', 'id_number'])->assertSessionDoesntHaveErrors('email'); // email is optional (FR-ADM-13)
     }
 
     public function test_fr_auth_16_email_change_checks_domain_and_alerts_both_addresses(): void
