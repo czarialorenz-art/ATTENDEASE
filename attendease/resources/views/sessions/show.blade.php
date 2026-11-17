@@ -50,6 +50,13 @@
             @endunless
         </div>
     </div>
+    @if (! $archived && ($semesterProblem = $class->semesterProblem($session->date)))
+        {{-- FR-ATT-19: an existing session outside the semester (e.g. the semester dates changed later) --}}
+        <p class="mb-4 rounded-lg bg-amber-50 px-4 py-2 text-sm text-amber-900" role="status">
+            <strong>{{ $semesterProblem }}.</strong> This session doesn't count in semester totals or students' semester summaries.
+            <a href="{{ route('classes.edit', $class) }}" class="font-semibold underline">Fix semester dates →</a>
+        </p>
+    @endif
     @if ($cancellation && ! $archived)
         <p class="mb-4 rounded-lg bg-red-50 px-4 py-2 text-sm text-red-800" role="status">
             <strong>You announced that class is cancelled on this date.</strong>

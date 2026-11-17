@@ -7,7 +7,16 @@
         <form method="POST" action="{{ route('sessions.store', $class) }}" class="card h-fit space-y-4 lg:col-span-1" novalidate>
             @csrf
             <h2 class="h2">New session</h2>
-            <x-field name="date" label="Date" type="date" :value="now()->toDateString()" required help="Stages can only be opened on this date." />
+            {{-- FR-ATT-19: limited to the semester; a live warning (and the server) explain any date outside it --}}
+            <x-field name="date" label="Date" type="date" :value="now()->toDateString()" required help="Stages can only be opened on this date."
+                :min="$class->semester_start->toDateString()" :max="$class->semester_end->toDateString()"
+                data-semester-start="{{ $class->semester_start->toDateString() }}" data-semester-end="{{ $class->semester_end->toDateString() }}"
+                data-semester-start-label="{{ $class->semester_start->format('M j, Y') }}" data-semester-end-label="{{ $class->semester_end->format('M j, Y') }}" />
+            <div id="semester-warning" @class(['rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900', 'hidden' => ! $errors->has('date')]) role="status">
+                <p data-semester-message></p>
+                <a href="{{ route('classes.edit', $class) }}" class="mt-1 inline-block font-semibold underline">Fix semester dates →</a>
+            </div>
+            <p class="-mt-2 text-xs text-slate-500">Semester: {{ $class->semester_start->format('M j, Y') }} – {{ $class->semester_end->format('M j, Y') }}</p>
             <x-field name="title" label="Title" placeholder="Optional, e.g. Week 5 lecture" />
             <x-field name="grace_minutes" label="Grace period (minutes)" type="number" :value="15" min="0" help="Scans within this time after Time In opens are Present; later ones are Late." />
             <button class="btn-primary w-full">Create session</button>
@@ -77,6 +86,9 @@
                                     @elseif ($s->time_out_closed_at) <span class="badge-neutral">Completed</span>
                                     @elseif ($s->time_in_opened_at) <span class="badge-pending">In progress</span>
                                     @else <span class="text-slate-400">Not started</span> @endif
+                                    @if ($problem = $class->semesterProblem($s->date))
+                                        <span class="badge-flag ml-1" title="{{ $problem }}; it doesn't count in semester totals.">Outside semester</span>
+                                    @endif
                                 </td>
                                 <td>{{ $s->records_count }}</td>
 
@@ -147,4 +159,33 @@
             <div class="mt-4">{{ $sessions->links() }}</div>
         </div>
     </div>
+    @push('scripts')
+    <script>
+        // FR-ATT-19: warn as soon as the chosen date is outside the semester (the server blocks it too).
+        (() => {
+            const input = document.querySelector('input[name="date"][data-semester-start]');
+            const box = document.getElementById('semester-warning');
+            if (!input || !box) return;
+            const msg = box.querySelector('[data-semester-message]');
+            const hadServerError = !box.classList.contains('hidden');
+
+            function check() {
+                const v = input.value; // YYYY-MM-DD, compares correctly as text
+                let text = '';
+                if (v && v < input.dataset.semesterStart) {
+                    text = `This date is before the semester starts (${input.dataset.semesterStartLabel}); it won't count in semester totals.`;
+                } else if (v && v > input.dataset.semesterEnd) {
+                    text = `This date is after the semester ends (${input.dataset.semesterEndLabel}); it won't count in semester totals.`;
+                }
+                msg.textContent = text;
+                box.classList.toggle('hidden', !text && !hadServerError);
+                if (text) msg.classList.remove('hidden'); else msg.classList.add('hidden');
+            }
+
+            input.addEventListener('input', check);
+            input.addEventListener('change', check);
+            check();
+        })();
+    </script>
+    @endpush
 </x-layouts.app>

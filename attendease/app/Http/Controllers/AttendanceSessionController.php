@@ -131,7 +131,7 @@ class AttendanceSessionController extends Controller
         $this->authorize('teach', $class);
 
         $data = $request->validate([
-            'date' => ['required', 'date'],
+            'date' => ['required', 'date', $this->withinSemester($class)],
             'title' => ['nullable', 'string', 'max:255'],
             'grace_minutes' => ['nullable', 'integer', 'min:0', 'max:1440'],
         ]);
@@ -144,6 +144,24 @@ class AttendanceSessionController extends Controller
 
         return redirect()->route('sessions.show', $session)->with('status', 'Session created.'
             .($cancelled ? ' Note: you announced that class is cancelled on '.$session->date->format('M j, Y').'.' : ''));
+    }
+
+    /**
+     * FR-ATT-19: sessions must fall inside the class's semester, or they wouldn't count in
+     * semester totals. The form shows a link to fix the semester dates next to this error.
+     */
+    private function withinSemester(SchoolClass $class): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) use ($class) {
+            try {
+                $problem = $class->semesterProblem((string) $value);
+            } catch (\Throwable) {
+                return; // not a date: the "date" rule reports it
+            }
+            if ($problem) {
+                $fail($problem.'; it wouldn\'t count in semester totals. Update the semester dates first.');
+            }
+        };
     }
 
     /** FR-ATT-11/12: records, flags and manual edits. */
@@ -191,6 +209,12 @@ class AttendanceSessionController extends Controller
         if (isset($data['date']) && $attendanceSession->hasStarted()
             && $attendanceSession->date->toDateString() !== \Illuminate\Support\Carbon::parse($data['date'])->toDateString()) {
             return back()->withErrors(['date' => "The date can't change after Time In has been opened."])->withInput();
+        }
+
+        // FR-ATT-19: a new date must be inside the semester (an unchanged date is left alone).
+        if (isset($data['date']) && $attendanceSession->date->toDateString() !== \Illuminate\Support\Carbon::parse($data['date'])->toDateString()
+            && ($problem = $attendanceSession->schoolClass->semesterProblem($data['date']))) {
+            return back()->withErrors(['date' => $problem."; it wouldn't count in semester totals. Update the semester dates first."])->withInput();
         }
 
         $attendanceSession->update([

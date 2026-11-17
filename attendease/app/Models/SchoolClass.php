@@ -89,6 +89,24 @@ class SchoolClass extends Model
         return $this->hasMany(AttendanceSession::class, 'class_id');
     }
 
+    /**
+     * FR-ATT-19: why a date is outside this class's semester, or null when it's inside.
+     * e.g. "This date is after the semester ends (Nov 14, 2026)".
+     */
+    public function semesterProblem(\Carbon\CarbonInterface|string $date): ?string
+    {
+        $day = ($date instanceof \Carbon\CarbonInterface ? $date->copy() : \Illuminate\Support\Carbon::parse($date))->startOfDay();
+
+        if ($day->lt($this->semester_start->copy()->startOfDay())) {
+            return 'This date is before the semester starts ('.$this->semester_start->format('M j, Y').')';
+        }
+        if ($day->gt($this->semester_end->copy()->startOfDay())) {
+            return 'This date is after the semester ends ('.$this->semester_end->format('M j, Y').')';
+        }
+
+        return null;
+    }
+
     /** FR-ANN: newest first. */
     public function announcements(): HasMany
     {

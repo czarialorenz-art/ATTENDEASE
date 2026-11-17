@@ -202,6 +202,54 @@ class SessionArchiveTest extends TestCase
             ->assertSee('No archived sessions match', false);
     }
 
+    public function test_fr_att_19_sessions_outside_the_semester_are_blocked_with_a_fix_link(): void
+    {
+        // Semester for this class: Aug 1 – Dec 15, 2026.
+        $url = "/classes/{$this->class->id}/sessions";
+
+        $this->actingAs($this->teacher)->post($url, ['date' => '2026-12-16'])
+            ->assertSessionHasErrors(['date' => "This date is after the semester ends (Dec 15, 2026); it wouldn't count in semester totals. Update the semester dates first."]);
+        $this->actingAs($this->teacher)->post($url, ['date' => '2026-07-31'])
+            ->assertSessionHasErrors(['date' => "This date is before the semester starts (Aug 1, 2026); it wouldn't count in semester totals. Update the semester dates first."]);
+        $this->assertSame(0, AttendanceSession::count());
+
+        // First and last day are fine.
+        $this->actingAs($this->teacher)->post($url, ['date' => '2026-08-01'])->assertSessionHasNoErrors();
+        $this->actingAs($this->teacher)->post($url, ['date' => '2026-12-15'])->assertSessionHasNoErrors();
+
+        // The form limits the picker and has the live warning with a link to fix the dates.
+        $this->actingAs($this->teacher)->get($url)->assertOk()
+            ->assertSee('min="2026-08-01"', false)->assertSee('max="2026-12-15"', false)
+            ->assertSee('id="semester-warning"', false)
+            ->assertSee(route('classes.edit', $this->class), false)
+            ->assertSee('Semester: Aug 1, 2026 – Dec 15, 2026');
+    }
+
+    public function test_fr_att_19_a_date_change_must_stay_inside_the_semester(): void
+    {
+        $s = $this->makeSession(['date' => '2026-11-14']);
+
+        $this->actingAs($this->teacher)->put("/sessions/{$s->id}", ['from_edit' => 1, 'date' => '2026-12-20', 'title' => 'x', 'grace_minutes' => 15])
+            ->assertSessionHasErrors('date');
+        $this->assertSame('2026-11-14', $s->fresh()->date->toDateString());
+    }
+
+    public function test_fr_att_19_existing_sessions_outside_the_semester_are_marked(): void
+    {
+        // e.g. the semester end was moved earlier after the session was made.
+        $s = $this->makeSession(['date' => '2026-11-14', 'title' => 'Late Week', 'time_in_opened_at' => now()]);
+        $this->class->update(['semester_end' => '2026-11-13']);
+
+        $this->actingAs($this->teacher)->get("/classes/{$this->class->id}/sessions")->assertSee('Outside semester');
+        $this->actingAs($this->teacher)->get("/sessions/{$s->id}")->assertOk()
+            ->assertSee('This date is after the semester ends (Nov 13, 2026).')->assertSee('Fix semester dates');
+
+        // Its title and grace can still be edited (the date isn't changing).
+        $this->actingAs($this->teacher)->put("/sessions/{$s->id}", ['date' => '2026-11-14', 'title' => 'Renamed', 'grace_minutes' => 10])
+            ->assertSessionHasNoErrors();
+        $this->assertSame('Renamed', $s->fresh()->title);
+    }
+
     public function test_a_session_with_an_open_stage_cannot_be_archived(): void
     {
         $s = $this->makeSession(['date' => '2026-11-14', 'time_in_opened_at' => now()]);
