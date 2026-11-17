@@ -18,6 +18,31 @@
     --color-gold-500: #e3ad1b;
 }
 
+/*
+ | Background picture (public/images/background.jpg) behind every page. It sits on a fixed layer
+ | behind the content, so it always covers the whole screen and doesn't scroll or stretch with
+ | long pages, on desktop and phones alike.
+ |  - bg-photo-light: inside pages, under a light see-through layer so dark text stays readable.
+ |  - bg-photo-dark: log in / sign up, under a dark blue tint for the white text.
+ */
+.bg-photo-light::before,
+.bg-photo-dark::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+}
+.bg-photo-light::before {
+    background-image: linear-gradient(rgb(248 250 252 / 0.85), rgb(248 250 252 / 0.85)), url('/images/background.jpg');
+}
+.bg-photo-dark::before {
+    background-image: linear-gradient(rgb(17 35 90 / 0.45), rgb(17 35 90 / 0.7)), url('/images/background.jpg');
+}
+
 @layer components {
     .card { @apply rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6; }
     .label { @apply mb-1 block text-sm font-medium text-slate-700; }
