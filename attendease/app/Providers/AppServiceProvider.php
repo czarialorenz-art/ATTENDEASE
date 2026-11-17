@@ -27,8 +27,8 @@ class AppServiceProvider extends ServiceProvider
         // Share the unread count with the top bar (FR-NOTIF-01).
         View::composer('components.layouts.app', function ($view) {
             $view->with('unreadCount', auth()->user()?->unreadNotifications()->count() ?? 0);
-            // Teachers who aren't students anywhere don't need the Scan QR button.
-            $view->with('showScanner', ! (auth()->user()?->isTeacherOnly() ?? false));
+            // FR-ACL-03: Scan QR and My attendance are for Students only.
+            $view->with('showScanner', auth()->user()?->isStudent() ?? false);
         });
     }
 }

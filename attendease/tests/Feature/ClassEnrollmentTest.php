@@ -29,7 +29,7 @@ class ClassEnrollmentTest extends TestCase
 
     public function test_fr_cls_01_teacher_creates_class_and_becomes_its_teacher(): void
     {
-        $teacher = User::factory()->create();
+        $teacher = User::factory()->teacher()->create();
 
         $this->actingAs($teacher)->post('/classes', $this->classData())->assertRedirect();
 
@@ -38,9 +38,19 @@ class ClassEnrollmentTest extends TestCase
         $this->assertSame('ITE101', $class->subject);
     }
 
+    /** FR-ACL-03: only Teachers create classes. */
+    public function test_students_and_admins_cannot_create_classes(): void
+    {
+        foreach ([User::factory()->create(), User::factory()->admin()->create()] as $user) {
+            $this->actingAs($user)->get('/classes/create')->assertForbidden();
+            $this->actingAs($user)->post('/classes', $this->classData())->assertForbidden();
+        }
+        $this->assertDatabaseCount('classes', 0);
+    }
+
     public function test_fr_cls_01_validation(): void
     {
-        $teacher = User::factory()->create();
+        $teacher = User::factory()->teacher()->create();
 
         $this->actingAs($teacher)->post('/classes', $this->classData(['semester_end' => '2026-07-01']))->assertSessionHasErrors('semester_end');
         $this->actingAs($teacher)->post('/classes', $this->classData(['semester' => '3rd']))->assertSessionHasErrors('semester');
@@ -129,7 +139,8 @@ class ClassEnrollmentTest extends TestCase
         Enrollment::where('student_id', $student->id)->update(['status' => 'approved']);
         $this->actingAs($student)->post('/classes/join', ['code' => $class->code])->assertSessionHasErrors('code');
 
-        $this->actingAs($class->teacher)->post('/classes/join', ['code' => $class->code])->assertSessionHasErrors('code');
+        // FR-ACL-03: a Teacher can't join classes at all.
+        $this->actingAs($class->teacher)->post('/classes/join', ['code' => $class->code])->assertForbidden();
         $this->assertDatabaseCount('enrollments', 1);
     }
 
@@ -238,22 +249,23 @@ class ClassEnrollmentTest extends TestCase
         Notification::assertSentTo($student, JoinRequestDecided::class, fn ($n) => $n->enrollment->status === 'rejected');
     }
 
-    public function test_fr_cls_08_dashboard_lists_taught_and_joined_classes(): void
+    public function test_fr_cls_08_dashboard_lists_taught_or_joined_classes_by_role(): void
     {
+        $mine = $this->makeClass(null, ['subject' => 'TAUGHT1']);
+        $this->enroll($mine, null, Enrollment::PENDING);
+        $this->enroll($mine, null, Enrollment::PENDING);
         $me = User::factory()->create();
-        $mine = $this->makeClass($me, ['subject' => 'TAUGHT1']);
-        $this->enroll($mine, null, Enrollment::PENDING);
-        $this->enroll($mine, null, Enrollment::PENDING);
-        $joined = $this->makeClass(null, ['subject' => 'JOINED1']);
-        $this->enroll($joined, $me);
-        $waiting = $this->makeClass(null, ['subject' => 'WAITING1']);
-        $this->enroll($waiting, $me, Enrollment::PENDING);
+        $this->enroll($this->makeClass(null, ['subject' => 'JOINED1']), $me);
+        $this->enroll($this->makeClass(null, ['subject' => 'WAITING1']), $me, Enrollment::PENDING);
         $this->makeClass(null, ['subject' => 'OTHER1']);
 
+        $this->actingAs($mine->teacher)->get('/dashboard')->assertOk()
+            ->assertSee('Classes I teach')->assertSee('TAUGHT1')->assertSee('2 pending')->assertSee('+ Create a class')
+            ->assertDontSee("Classes I'm in", false)->assertDontSee('name="code"', false)->assertDontSee('OTHER1');
+
         $this->actingAs($me)->get('/dashboard')->assertOk()
-            ->assertSee('Classes I teach')->assertSee('TAUGHT1')->assertSee('2 pending')
             ->assertSee("Classes I'm in", false)->assertSee('JOINED1')->assertSee('WAITING1')->assertSee('Waiting for approval')
-            ->assertDontSee('OTHER1')
-            ->assertSee('name="code"', false);
+            ->assertSee('name="code"', false)
+            ->assertDontSee('Classes I teach')->assertDontSee('+ Create a class')->assertDontSee('OTHER1');
     }
 }

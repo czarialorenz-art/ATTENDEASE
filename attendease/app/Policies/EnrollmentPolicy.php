@@ -10,6 +10,6 @@ class EnrollmentPolicy
     /** FR-CLS-05/06: only the class's teacher approves, rejects or removes. */
     public function decide(User $user, Enrollment $enrollment): bool
     {
-        return (int) $enrollment->schoolClass->teacher_id === (int) $user->id;
+        return $user->teaches($enrollment->schoolClass);
     }
 }

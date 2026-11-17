@@ -15,6 +15,17 @@ class User extends Authenticatable
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
+    public const ADMIN = 'admin';
+    public const TEACHER = 'teacher';
+    public const STUDENT = 'student';
+
+    /** FR-ADM-01: every account has exactly one role. */
+    public const ROLES = [self::ADMIN => 'Admin', self::TEACHER => 'Teacher', self::STUDENT => 'Student'];
+
+    /**
+     * role and deactivated_at are left out on purpose: only the admin side sets them,
+     * explicitly, so no self-service form can ever change them.
+     */
     protected $fillable = [
         'name', 'id_number', 'email', 'password',
         'course', 'year', 'section', 'department',
@@ -22,12 +33,46 @@ class User extends Authenticatable
 
     protected $hidden = ['password', 'remember_token'];
 
+    protected $attributes = ['role' => self::STUDENT];
+
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
+            'deactivated_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === self::ADMIN;
+    }
+
+    public function isTeacher(): bool
+    {
+        return $this->role === self::TEACHER;
+    }
+
+    public function isStudent(): bool
+    {
+        return $this->role === self::STUDENT;
+    }
+
+    public function hasRole(string ...$roles): bool
+    {
+        return in_array($this->role, $roles, true);
+    }
+
+    public function roleLabel(): string
+    {
+        return self::ROLES[$this->role] ?? ucfirst((string) $this->role);
+    }
+
+    /** FR-ADM-07: deactivated accounts can't log in (and are logged out of open sessions). */
+    public function isActive(): bool
+    {
+        return $this->deactivated_at === null;
     }
 
     /** Classes this user created (and therefore teaches). */
@@ -55,23 +100,18 @@ class User extends Authenticatable
     }
 
     /**
-     * Teaches at least one class and isn't a student (approved or pending) in any:
-     * the dashboard and top bar then hide student-only things such as "Classes I'm in" and Scan QR.
+     * FR-ACL-03: roles are enforced. Only a Teacher can teach (a class they created), so a
+     * teacher who is later made a Student or Admin loses the teaching pages until the role is given back.
      */
-    public function isTeacherOnly(): bool
-    {
-        return $this->taughtClasses()->exists()
-            && ! $this->enrollments()->whereIn('status', [Enrollment::APPROVED, Enrollment::PENDING])->exists();
-    }
-
     public function teaches(SchoolClass $class): bool
     {
-        return (int) $class->teacher_id === (int) $this->id;
+        return $this->isTeacher() && (int) $class->teacher_id === (int) $this->id;
     }
 
+    /** Only a Student can attend, scan or ask for corrections. */
     public function isApprovedIn(SchoolClass $class): bool
     {
-        return $this->enrollments()
+        return $this->isStudent() && $this->enrollments()
             ->where('class_id', $class->id)
             ->where('status', Enrollment::APPROVED)
             ->exists();

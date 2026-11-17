@@ -1,5 +1,9 @@
 <?php
 
+use App\Http\Controllers\Admin\ActivityLogController;
+use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\Admin\UserController as AdminUserController;
+use App\Http\Controllers\Admin\UserImportController;
 use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\AttendanceCorrectionController;
 use App\Http\Controllers\AttendanceHistoryController;
@@ -41,8 +45,8 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
 
     Route::redirect('/', '/dashboard');
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
-    Route::get('/dashboard/today', [DashboardController::class, 'today'])->name('dashboard.today'); // polled by the dashboard
-    Route::get('/dashboard/today/mine', [DashboardController::class, 'todayStudent'])->name('dashboard.today.student');
+    Route::get('/dashboard/today', [DashboardController::class, 'today'])->middleware('role:teacher')->name('dashboard.today'); // polled by the dashboard
+    Route::get('/dashboard/today/mine', [DashboardController::class, 'todayStudent'])->middleware('role:student')->name('dashboard.today.student');
 
     // Account
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -56,9 +60,10 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
     Route::post('/notifications/{id}/read', [NotificationController::class, 'read'])->name('notifications.read');
 
     // Classes and enrollment (section 4)
-    Route::get('/classes/create', [ClassController::class, 'create'])->name('classes.create');
-    Route::post('/classes', [ClassController::class, 'store'])->name('classes.store');
-    Route::post('/classes/join', [EnrollmentController::class, 'join'])->name('classes.join');
+    // FR-ACL-03: only Teachers create classes and only Students join them (class pages check the role through the policies).
+    Route::get('/classes/create', [ClassController::class, 'create'])->middleware('role:teacher')->name('classes.create');
+    Route::post('/classes', [ClassController::class, 'store'])->middleware('role:teacher')->name('classes.store');
+    Route::post('/classes/join', [EnrollmentController::class, 'join'])->middleware('role:student')->name('classes.join');
     Route::get('/classes/{class}', [ClassController::class, 'show'])->name('classes.show');
     Route::get('/classes/{class}/edit', [ClassController::class, 'edit'])->name('classes.edit');
     Route::put('/classes/{class}', [ClassController::class, 'update'])->name('classes.update');
@@ -87,10 +92,12 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
     Route::post('/sessions/{attendanceSession}/records', [AttendanceSessionController::class, 'manual'])->name('sessions.manual');
     Route::post('/flags/{scanFlag}/clear', [AttendanceSessionController::class, 'clearFlag'])->name('flags.clear');
 
-    Route::view('/scanner', 'scan.scanner')->name('scanner'); // in-app camera QR reader
-    Route::get('/scan', [ScanController::class, 'show'])->name('scan');
-    Route::post('/scan', [ScanController::class, 'store'])->name('scan.store');
-    Route::get('/my/attendance', AttendanceHistoryController::class)->name('attendance.history');
+    Route::middleware('role:student')->group(function () {
+        Route::view('/scanner', 'scan.scanner')->name('scanner'); // in-app camera QR reader
+        Route::get('/scan', [ScanController::class, 'show'])->name('scan');
+        Route::post('/scan', [ScanController::class, 'store'])->name('scan.store');
+        Route::get('/my/attendance', AttendanceHistoryController::class)->name('attendance.history');
+    });
 
     // Announcements and class cancellations (FR-ANN)
     Route::get('/classes/{class}/announcements', [AnnouncementController::class, 'index'])->name('announcements.index');
@@ -100,7 +107,7 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
     Route::delete('/announcements/{announcement}', [AnnouncementController::class, 'destroy'])->name('announcements.destroy');
 
     // Correction requests (FR-ATT-18)
-    Route::post('/records/{attendanceRecord}/corrections', [AttendanceCorrectionController::class, 'store'])->name('corrections.store');
+    Route::post('/records/{attendanceRecord}/corrections', [AttendanceCorrectionController::class, 'store'])->middleware('role:student')->name('corrections.store');
     Route::get('/classes/{class}/corrections', [AttendanceCorrectionController::class, 'index'])->name('corrections.index');
     Route::post('/corrections/{correction}/approve', [AttendanceCorrectionController::class, 'approve'])->name('corrections.approve');
     Route::post('/corrections/{correction}/reject', [AttendanceCorrectionController::class, 'reject'])->name('corrections.reject');
@@ -108,4 +115,26 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
     // Attendance report (section 7)
     Route::get('/classes/{class}/report', [ReportController::class, 'show'])->name('reports.show');
     Route::get('/classes/{class}/report.pdf', [ReportController::class, 'pdf'])->name('reports.pdf');
+});
+
+/* ---------------------------------------------------------------------
+ | Admin side (FR-ADM): Dashboard, User Management, Activity Log
+ * --------------------------------------------------------------------- */
+Route::middleware(['auth', 'auth.session', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/', AdminDashboardController::class)->name('dashboard');
+
+    Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
+    Route::get('/users/create', [AdminUserController::class, 'create'])->name('users.create');
+    Route::post('/users', [AdminUserController::class, 'store'])->name('users.store');
+    Route::get('/users/import', [UserImportController::class, 'create'])->name('users.import');
+    Route::post('/users/import', [UserImportController::class, 'store'])->name('users.import.store');
+    Route::get('/users/import/template.{format}', [UserImportController::class, 'template'])
+        ->whereIn('format', ['xlsx', 'csv'])->name('users.import.template');
+    Route::get('/users/{user}/edit', [AdminUserController::class, 'edit'])->name('users.edit');
+    Route::put('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
+    Route::post('/users/{user}/deactivate', [AdminUserController::class, 'deactivate'])->name('users.deactivate');
+    Route::post('/users/{user}/activate', [AdminUserController::class, 'activate'])->name('users.activate');
+
+    // FR-LOG-04: read-only. There are deliberately no edit or delete routes.
+    Route::get('/activity', ActivityLogController::class)->name('activity.index');
 });

@@ -14,6 +14,6 @@ class ScanFlagPolicy
 
         return $session
             && ! $session->isArchived()
-            && (int) $session->schoolClass->teacher_id === (int) $user->id;
+            && $user->teaches($session->schoolClass);
     }
 }

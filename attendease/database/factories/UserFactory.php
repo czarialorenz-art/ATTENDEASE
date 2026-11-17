@@ -23,6 +23,27 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
+            'role' => User::STUDENT,
         ];
+    }
+
+    public function student(): static
+    {
+        return $this->state(fn () => ['role' => User::STUDENT]);
+    }
+
+    public function teacher(): static
+    {
+        return $this->state(fn () => ['role' => User::TEACHER]);
+    }
+
+    public function admin(): static
+    {
+        return $this->state(fn () => ['role' => User::ADMIN]);
+    }
+
+    public function deactivated(): static
+    {
+        return $this->state(fn () => ['deactivated_at' => now()]);
     }
 }

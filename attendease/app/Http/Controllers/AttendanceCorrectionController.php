@@ -112,7 +112,7 @@ class AttendanceCorrectionController extends Controller
         DB::transaction(function () use ($correction, $status, $data, $request, $session) {
             if ($status === AttendanceCorrection::APPROVED) {
                 // Recorded as the teacher's decision (source = manual), so closing Time Out won't undo it.
-                $this->attendance->setManualStatus($session, $correction->student, $correction->requested_status);
+                $this->attendance->setManualStatus($session, $correction->student, $correction->requested_status, 'correction request approved');
             }
 
             $correction->update([

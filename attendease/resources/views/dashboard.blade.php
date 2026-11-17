@@ -1,13 +1,20 @@
+@php
+    $isTeacher = auth()->user()->isTeacher();
+    $isStudent = auth()->user()->isStudent();
+@endphp
 <x-layouts.app title="Dashboard">
     <div class="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
             <h1 class="h1">Hi, {{ \Illuminate\Support\Str::before(auth()->user()->name, ' ') ?: auth()->user()->name }}</h1>
             <p class="text-sm text-slate-500">{{ now()->format('l, F j, Y') }}</p>
         </div>
-        <a href="{{ route('classes.create') }}" class="btn-primary">+ Create a class</a>
+        @if ($isTeacher)
+            <a href="{{ route('classes.create') }}" class="btn-primary">+ Create a class</a>
+        @endif
     </div>
 
-    {{-- Join a class (FR-CLS-04) --}}
+    {{-- Join a class (FR-CLS-04): Students only (FR-ACL-03) --}}
+    @if ($isStudent)
     <form method="POST" action="{{ route('classes.join') }}" class="card mb-6 flex flex-col gap-3 sm:flex-row sm:items-end" novalidate>
         @csrf
         <div class="flex-1">
@@ -18,12 +25,13 @@
         </div>
         <button class="btn-primary sm:w-40">Ask to join</button>
     </form>
+    @endif
 
-    {{-- Teacher-only (teaches classes, not a student anywhere): no student column, no "Classes I'm in". --}}
-    @php($teacherOnly = $teaching->isNotEmpty() && $enrolled->isEmpty())
+    {{-- FR-ACL-03: a Teacher sees only the teaching side, a Student only the student side; each fills the width. --}}
     <div class="grid gap-6 lg:grid-cols-2">
         {{-- Teaching side --}}
-        <section @class(['space-y-6' => ! $teacherOnly, 'grid items-start gap-6 lg:col-span-2 lg:grid-cols-2' => $teacherOnly])>
+        @if ($isTeacher)
+        <section class="grid items-start gap-6 lg:col-span-2 lg:grid-cols-2">
             <div class="card">
                 <h2 class="h2 mb-3">Classes I teach</h2>
                 @forelse ($teaching as $c)
@@ -54,11 +62,13 @@
             @endif
         </section>
 
+        @endif
+
         {{-- Student side --}}
-        @unless ($teacherOnly)
-        <section class="space-y-6">
+        @if ($isStudent)
+        <section class="grid items-start gap-6 lg:col-span-2 lg:grid-cols-2">
             @if ($enrolled->where('status', 'approved')->isNotEmpty())
-                <a href="{{ route('scanner') }}" class="card flex items-center gap-4 border-brand-100 bg-brand-50 hover:bg-brand-100">
+                <a href="{{ route('scanner') }}" class="card flex items-center gap-4 border-brand-100 bg-brand-50 hover:bg-brand-100 lg:col-span-2">
                     <span class="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand-600 text-white">
                         <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7V5a1 1 0 011-1h2M17 4h2a1 1 0 011 1v2M20 17v2a1 1 0 01-1 1h-2M7 20H5a1 1 0 01-1-1v-2M8 8h3v3H8zM13 13h3v3h-3zM13 8h3M8 13v3"/></svg>
                     </span>
@@ -119,7 +129,7 @@
                 </div>
             @endif
         </section>
-        @endunless
+        @endif
     </div>
     @push('scripts')
     <script>

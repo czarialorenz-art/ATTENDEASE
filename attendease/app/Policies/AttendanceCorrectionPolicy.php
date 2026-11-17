@@ -12,6 +12,6 @@ class AttendanceCorrectionPolicy
     {
         $session = $correction->session();
 
-        return $session && (int) $session->schoolClass->teacher_id === (int) $user->id;
+        return $session && $user->teaches($session->schoolClass);
     }
 }

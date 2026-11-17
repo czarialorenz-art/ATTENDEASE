@@ -40,14 +40,15 @@ Requirement IDs use the form `FR-<AREA>-<NN>` so tasks, commits and tests can re
 
 ## 2. Actors and access control
 
-Everyone signs up through the same form, with no role choice. Roles are per class: the user who creates a class is its teacher, and users approved into it are its students. One account can teach some classes and be a student in others.
+Every account has exactly one role: **Admin**, **Teacher** or **Student** (`users.role`). Sign-up creates a Student; the admin assigns the Teacher and Admin roles (FR-ADM-08), and the first admin is made with `php artisan attendease:make-admin {email}`. Within a class, the Teacher who created it manages it and its approved Students attend it.
 
-| Role in a class | Can do | Cannot do |
+| Role | Can do | Cannot do |
 | --- | --- | --- |
-| **Teacher** (the class's creator) | Manage that class's students, schedule, location, sessions, flags and reports | See or change classes created by someone else |
-| **Student** (approved member) | Scan attendance, view their own attendance in that class | See other students' data; use teacher actions in that class |
+| **Admin** (the admin side) | See totals and today's classes, manage every account (add, edit, assign roles, deactivate, import), read the activity log | Teach or attend classes; change their own role; deactivate themselves |
+| **Teacher** (in classes they created) | Create classes; manage their students, schedule, location, sessions, flags, announcements, corrections and reports | Join classes, scan, or see classes created by someone else |
+| **Student** (approved member) | Join classes, scan attendance, view their own attendance, request corrections | Create classes; see other students' data; use teacher actions |
 
-- **FR-ACL-01** Every route is behind sign-in, except sign-up, log in, forgot password and reset password. There is no role column or role middleware. Teacher actions are allowed only for the class's creator (`classes.teacher_id`), and student actions only for users with an approved enrollment in that class. Anything else returns HTTP 403. A user cannot join a class they created.
+- **FR-ACL-01** *(changed)* Every route is behind sign-in, except sign-up, log in, forgot password and reset password. Roles are enforced: the `role` middleware guards role-wide pages (the admin area: Admin; create a class: Teacher; join, scan, My attendance and correction requests: Student), and the class policies require both the role and the link to the class (a Teacher and `classes.teacher_id`; a Student and an approved enrollment). Anything else returns HTTP 403. A teacher whose role changes loses access to their classes until the Teacher role is given back.
 - **FR-ACL-02** Teacher-owned resources (class, session, scan flag, enrollment, report) are authorized with Laravel Policies, using route model binding plus `authorize()` on every action, including downloads and the live QR endpoint.
 - **FR-ACL-03** Student-facing reads are scoped on the server to `student_id = auth()->id()` and to classes where the student's enrollment is approved.
 - **FR-ACL-04** A missing or unauthorized resource returns 403 or 404 and never leaks its data.
@@ -60,7 +61,7 @@ Teachers and students share one sign-up and one login. Only school email address
 
 ### Sign-up
 
-- **FR-AUTH-01** A single sign-up form has these fields: Full Name, ID Number, School Email, Password. There is no role field.
+- **FR-AUTH-01** A single sign-up form has these fields: Full Name, ID Number, School Email, Password. There is no role field: every new account is a Student, and the admin assigns other roles (FR-ADM-08).
 - **FR-AUTH-02** The email must end in `@mqcqc.ph.education`, checked case-insensitively after trimming. Any other domain is rejected with a field error. The domain is kept in config: `ALLOWED_EMAIL_DOMAIN`.
 - **FR-AUTH-03** Email and ID Number are each unique across all users.
 - **FR-AUTH-04** Passwords are 8–64 characters and must include an uppercase letter, a lowercase letter, a number and a special character. The same rule applies to sign-up, password reset and change password. Passwords are stored with Laravel's default hasher. New-password fields show a live checklist of these rules, and every password field has a Show/Hide toggle.
@@ -194,6 +195,37 @@ A teacher opens a dated session, runs a Time In stage and then a Time Out stage,
 
 ---
 
+## 6b. Admin side *(new)*
+
+Three modules for Admin accounts: Dashboard, User Management and Activity Log.
+
+### Access and layout
+
+- **FR-ADM-01** *(new)* The admin side lives under `/admin` and only Admin accounts can open it (`role:admin` middleware; others get 403). It has a sidebar with **Dashboard**, **User Management** and **Activity Log** (a scrolling row on phones). An admin who logs in, or opens `/dashboard`, lands on the admin dashboard.
+
+### Dashboard
+
+- **FR-ADM-02** *(new)* Total cards: **Total Students** and **Total Teachers** (active accounts), **Total Subjects** and **Total Sections** (distinct subject names and sections across classes, ignoring case and spaces; there are no separate subject or section tables).
+- **FR-ADM-03** *(new)* A class list for a chosen date (today by default): one row per schedule slot on that weekday, for classes whose semester includes the date, ordered by start time. Columns: Subject (with section), Teacher, Room (building, floor and room), Time, **Scanned In** (students who scanned Time In that day / approved students, e.g. 36 / 40) and Status.
+- **FR-ADM-04** *(new)* Status: **Recorded** when the class has at least one attendance record that day (archived sessions don't count); **No attendance** when the class time has started and nothing is recorded; **Upcoming** when it hasn't started yet; **Class cancelled** when the teacher announced a cancellation for that date (FR-ANN-02).
+- **FR-ADM-05** *(new)* A warning above the table lists the classes with **No attendance** on that date (subject, section, time, teacher) so the admin can follow up. The page uses a fixed number of grouped queries, whatever the number of classes.
+
+### User Management
+
+- **FR-ADM-06** *(new)* A paginated table of all accounts (20 per page) with search by name or ID number and filters for Role (Admin, Teacher, Student) and Status (Active, Deactivated).
+- **FR-ADM-07** *(new)* Accounts are **deactivated, never deleted**. A deactivated account can't log in (it is told so only after entering the right password) and any open session is signed out on its next request. **Activate** restores access. An admin can't deactivate their own account.
+- **FR-ADM-08** *(new)* Add and Edit forms: full name, ID number and school email (required; ID number and email unique), role, course, year, section, department, and a password (Add: blank uses the default password; Edit: blank keeps it, a new one signs the user out everywhere). An admin can't change their own role. Changing a role also signs the user out.
+- **FR-ADM-09** *(new)* Import Students and Teachers from CSV or Excel (maatwebsite/excel; .csv, .xlsx, .xls up to 5 MB and 2,000 rows). A template (Role, ID Number, Name, Email, Course, Year, Section, Department) downloads as Excel or CSV. Each row is checked on its own; invalid rows, IDs or emails that already exist, and repeats within the file are skipped, and the summary shows "40 imported, 2 skipped" with each skipped row's reasons. Imported accounts get the hashed default password from `IMPORT_DEFAULT_PASSWORD` (it must meet the password rules, or importing is disabled).
+
+### Activity Log
+
+- **FR-LOG-01** *(new)* Changes are recorded with spatie/laravel-activitylog (`activity_log` table): who did it, their role at the time, the action and the details.
+- **FR-LOG-02** *(new)* Logged actions: **Attendance edited** (teacher's manual change or an approved correction, e.g. "Ana Cruz (2023-00001) · ITE101 BSIT-1A · Nov 12, 2026: Absent → Present (manual edit)"), **User added**, **User edited** (each changed field, old → new; "password reset" without the password), **Role changed** (old → new), **User deactivated**, **User activated** and **Users imported** (file, counts and skipped rows).
+- **FR-LOG-03** *(new)* The Activity Log page shows Date & Time, User (with their role), Action and Details, newest first, 25 per page, with filters for a date range and the action type.
+- **FR-LOG-04** *(new)* The log is read-only: there is no way to edit or delete entries from the app.
+
+---
+
 ## 7. Notifications and email
 
 Every class event creates an in-app notification and an email copy. Account events send email only. All email is queued, so a failed email never fails the request that triggered it.
@@ -227,7 +259,7 @@ All tables have `id` and timestamps. Foreign keys use `constrained()`.
 
 | Table | Key columns |
 | --- | --- |
-| `users` | name, id_number (unique), email (unique), password, course, year, section, department, remember_token |
+| `users` | name, id_number (unique), email (unique), role (admin / teacher / student), deactivated_at (null = active), password, course, year, section, department, remember_token |
 | `user_devices` | user_id, token_hash, user_agent, ip, last_seen_at |
 | `password_reset_tokens` | email, token (hashed), created_at; expires after 15 minutes, single use |
 | `sessions` | Laravel database session driver |
@@ -241,6 +273,7 @@ All tables have `id` and timestamps. Foreign keys use `constrained()`.
 | `scan_logs` | attendance_record_id, stage, ip, device_id, latitude, longitude, accuracy, distance_m, scanned_at |
 | `scan_flags` | scan_log_id, code (NO_LOCATION / TOO_FAR / SHARED_DEVICE / IP_BURST), cleared_by, cleared_at; unique(scan_log_id, code) |
 | `notifications` | Laravel default |
+| `activity_log` | spatie/laravel-activitylog: log_name, description (details), event (action type), subject, causer, properties (old / new values, causer_role), created_at (FR-LOG) |
 
 Laravel's `cache`, `jobs` and `failed_jobs` tables are also used (rate limiting, queued email).
 
@@ -287,7 +320,7 @@ Laravel's `cache`, `jobs` and `failed_jobs` tables are also used (rate limiting,
 
 ## 12. Acceptance criteria (key paths)
 
-- [ ] Signing up with a non-@mqcqc.ph.education email fails; a school email succeeds, and the welcome email is queued. The form has no role field.
+- [ ] Signing up with a non-@mqcqc.ph.education email fails; a school email succeeds, and the welcome email is queued. The form has no role field and the new account is a Student.
 - [ ] The 6th failed login within the window is blocked, with a retry timer.
 - [ ] A reset link works once and fails after 15 minutes; after a reset, every session is logged out.
 - [ ] Teacher A gets 403 on every route for Teacher B's class.
@@ -313,11 +346,15 @@ Laravel's `cache`, `jobs` and `failed_jobs` tables are also used (rate limiting,
 | Scanning (FR-ATT) | **Added:** in-app QR scanner (FR-ATT-06a) and the student's own attendance summary (FR-ATT-15). |
 | Students page (FR-CLS) | **Added:** each student's section (FR-CLS-09). |
 | Notifications | "Submission checked" removed with submissions. |
+| Roles (FR-ACL) | **Changed:** one role per account (Admin / Teacher / Student), enforced; was per class with no role column. |
+| Admin side (FR-ADM, FR-LOG) | **Added:** admin dashboard, user management with CSV/Excel import, and the activity log. |
 
 ---
 
 ## 14. Open questions
 
+- **Admin setup:** on each server run the migrations, set `IMPORT_DEFAULT_PASSWORD`, and make the first admin with `php artisan attendease:make-admin {email}`.
+- **Teacher sign-up:** teachers who sign up start as Students until the admin sets their role. Should sign-up ask for a role that the admin then approves?
 - **Removed features:** should any of the removed features return in a later version? If so, they need their own spec.
 - **Hosting:** choose the host (InfinityFree can't run queued email or background jobs; Laravel Cloud needs the proxy setting in section 11).
 - **Database:** set the production MySQL password and run the migrations, including the one that drops the old assessment tables.

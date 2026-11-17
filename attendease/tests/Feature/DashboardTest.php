@@ -117,27 +117,32 @@ class DashboardTest extends TestCase
         $this->actingAs($teacher)->get("/classes/{$class->id}")->assertDontSee('href="'.route('scanner').'"', false);
     }
 
-    public function test_a_teacher_who_is_also_a_student_keeps_both(): void
+    /** FR-ACL-03: roles are enforced, so old enrollments of a Teacher don't give them the student side. */
+    public function test_a_teacher_with_old_enrollments_sees_only_the_teaching_side(): void
     {
-        $taught = $this->makeClass(null, ['subject' => 'TAUGHT']);
-        $teacher = $taught->teacher;
-        $this->enroll($this->makeClass(null, ['subject' => 'STUDYING']), $teacher);
+        $teacher = $this->makeClass(null, ['subject' => 'TAUGHT'])->teacher;
+        $studying = $this->makeClass(null, ['subject' => 'STUDYING']);
+        $this->enroll($studying, $teacher);
 
         $this->actingAs($teacher)->get('/dashboard')->assertOk()
-            ->assertSee('Classes I teach')->assertSee("Classes I'm in", false)->assertSee('STUDYING')
-            ->assertSee('href="'.route('scanner').'"', false);
-
-        // A pending request also counts: they still need "Classes I'm in" to see it.
-        $other = $this->makeClass()->teacher;
-        $this->enroll($this->makeClass(), $other, 'pending');
-        $this->actingAs($other)->get('/dashboard')->assertSee("Classes I'm in", false)->assertSee('Waiting for approval');
+            ->assertSee('TAUGHT')->assertDontSee('STUDYING')->assertDontSee("Classes I'm in", false)
+            ->assertDontSee('href="'.route('scanner').'"', false);
+        $this->actingAs($teacher)->get("/classes/{$studying->id}")->assertForbidden();
+        $this->actingAs($teacher)->get('/scanner')->assertForbidden();
+        $this->actingAs($teacher)->get('/my/attendance')->assertForbidden();
     }
 
-    public function test_a_new_user_with_no_classes_still_sees_both_sides(): void
+    public function test_a_new_student_sees_only_the_student_side(): void
     {
         $this->actingAs(User::factory()->create())->get('/dashboard')->assertOk()
-            ->assertSee('Classes I teach')->assertSee("Classes I'm in", false)
-            ->assertSee('href="'.route('scanner').'"', false);
+            ->assertSee("Classes I'm in", false)->assertSee('name="code"', false)
+            ->assertSee('href="'.route('scanner').'"', false)
+            ->assertDontSee('Classes I teach')->assertDontSee('+ Create a class');
+    }
+
+    public function test_an_admin_is_sent_to_the_admin_dashboard(): void
+    {
+        $this->actingAs(User::factory()->admin()->create())->get('/dashboard')->assertRedirect(route('admin.dashboard'));
     }
 
     public function test_only_the_teachers_own_classes_and_only_for_teachers(): void

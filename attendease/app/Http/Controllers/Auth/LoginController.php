@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Notifications\SecurityAlert;
 use App\Services\DeviceService;
 use App\Support\RequestContext;
@@ -41,12 +42,20 @@ class LoginController extends Controller
             ]);
         }
 
-        if (! Auth::attempt(['email' => $email, 'password' => $request->input('password')], $request->boolean('remember'))) {
+        $credentials = ['email' => $email, 'password' => $request->input('password')];
+
+        // FR-ADM-07: a deactivated account never gets a session.
+        if (! Auth::attemptWhen($credentials, fn (User $user) => $user->isActive(), $request->boolean('remember'))) {
             RateLimiter::hit($key, self::DECAY_SECONDS);
 
-            // FR-AUTH-08: never reveal whether the email exists.
+            // Say "deactivated" only to someone who knows the password; otherwise stay vague (FR-AUTH-08).
+            $user = Auth::getProvider()->retrieveByCredentials(['email' => $email]);
+            $deactivated = $user instanceof User && ! $user->isActive() && Auth::getProvider()->validateCredentials($user, $credentials);
+
             throw ValidationException::withMessages([
-                'email' => 'These credentials do not match our records.',
+                'email' => $deactivated
+                    ? 'Your account has been deactivated. Contact the administrator.'
+                    : 'These credentials do not match our records.',
             ]);
         }
 
@@ -59,7 +68,7 @@ class LoginController extends Controller
             $user->notify(new SecurityAlert(SecurityAlert::NEW_SIGN_IN, RequestContext::capture($request)));
         }
 
-        return redirect()->intended(route('dashboard'));
+        return redirect()->intended($user->isAdmin() ? route('admin.dashboard') : route('dashboard'));
     }
 
     public function destroy(Request $request)

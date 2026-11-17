@@ -21,6 +21,10 @@ return [
     // FR-AUTH-02: only this email domain may register.
     'allowed_email_domain' => env('ALLOWED_EMAIL_DOMAIN', 'mqcqc.ph.education'),
 
+    // FR-ADM-09: password given to imported accounts (and to accounts an admin adds without
+    // typing a password). Stored hashed; users change it under Change password.
+    'import_default_password' => env('IMPORT_DEFAULT_PASSWORD'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Environment

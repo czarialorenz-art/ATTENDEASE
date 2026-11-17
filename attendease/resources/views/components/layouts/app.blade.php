@@ -26,8 +26,14 @@
                     <span class="hidden sm:inline">Scan QR</span>
                 </a>
                 @endif
+                @if (auth()->user()->isAdmin())
+                <a href="{{ route('admin.dashboard') }}" class="hidden rounded-lg px-3 py-1.5 text-sm hover:bg-white/10 md:inline">Admin</a>
+                @else
                 <a href="{{ route('dashboard') }}" class="hidden rounded-lg px-3 py-1.5 text-sm hover:bg-white/10 md:inline">Dashboard</a>
+                @endif
+                @if ($showScanner)
                 <a href="{{ route('attendance.history') }}" class="hidden rounded-lg px-3 py-1.5 text-sm hover:bg-white/10 md:inline">My attendance</a>
+                @endif
 
                 <a href="{{ route('notifications.index') }}" class="relative rounded-lg p-2 hover:bg-white/10" aria-label="Notifications ({{ $unreadCount }} unread)">
                     <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
@@ -46,8 +52,10 @@
                             <div class="truncate font-semibold text-slate-900">{{ auth()->user()->name }}</div>
                             <div class="truncate text-xs text-slate-500">{{ auth()->user()->email }}</div>
                         </div>
-                        <a href="{{ route('dashboard') }}" class="block px-4 py-2 hover:bg-slate-50 md:hidden">Dashboard</a>
+                        <a href="{{ route(auth()->user()->isAdmin() ? 'admin.dashboard' : 'dashboard') }}" class="block px-4 py-2 hover:bg-slate-50 md:hidden">{{ auth()->user()->isAdmin() ? 'Admin' : 'Dashboard' }}</a>
+                        @if ($showScanner)
                         <a href="{{ route('attendance.history') }}" class="block px-4 py-2 hover:bg-slate-50 md:hidden">My attendance</a>
+                        @endif
                         <a href="{{ route('profile.edit') }}" class="block px-4 py-2 hover:bg-slate-50">Profile</a>
                         <a href="{{ route('password.edit') }}" class="block px-4 py-2 hover:bg-slate-50">Change password</a>
                         <form method="POST" action="{{ route('logout') }}">

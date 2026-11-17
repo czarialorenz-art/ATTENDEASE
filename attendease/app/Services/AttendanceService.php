@@ -10,6 +10,7 @@ use App\Models\SchoolClass;
 use App\Models\User;
 use App\Notifications\AbsenceAlert;
 use App\Notifications\TimeInOpened;
+use App\Support\Audit;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
@@ -148,18 +149,24 @@ class AttendanceService
      | Manual changes (FR-ATT-12)
      * ------------------------------------------------------------------ */
 
-    public function setManualStatus(AttendanceSession $session, User $student, string $status): AttendanceRecord
+    /** @param  string  $via  how the change was made, for the activity log (FR-LOG-02) */
+    public function setManualStatus(AttendanceSession $session, User $student, string $status, string $via = 'manual edit'): AttendanceRecord
     {
         $record = AttendanceRecord::firstOrNew([
             'attendance_session_id' => $session->id,
             'student_id' => $student->id,
         ]);
 
-        $wasAbsent = $record->exists && $record->status === AttendanceRecord::ABSENT;
+        $old = $record->exists ? $record->status : null;
+        $wasAbsent = $old === AttendanceRecord::ABSENT;
 
         $record->status = $status;
         $record->source = AttendanceRecord::SOURCE_MANUAL;
         $record->save();
+
+        if ($old !== $status) {
+            $this->logStatusChange($session, $student, $record, $old, $status, $via);
+        }
 
         if ($status === AttendanceRecord::ABSENT && ! $wasAbsent) {
             $student->notify(new AbsenceAlert($session));
@@ -298,5 +305,20 @@ class AttendanceService
         $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
 
         return 2 * $r * asin(min(1, sqrt($a)));
+    }
+
+    /** FR-LOG-02: e.g. "Juan Dela Cruz (2023-00001) · ITE101 BSIT-1A · Nov 12, 2026: Absent → Present (manual edit)". */
+    private function logStatusChange(AttendanceSession $session, User $student, AttendanceRecord $record, ?string $old, string $new, string $via): void
+    {
+        $class = $session->schoolClass;
+        $label = fn (?string $s) => $s === null ? 'No record' : ucfirst($s);
+
+        Audit::log(Audit::ATTENDANCE_EDITED,
+            Audit::who($student).' · '.$class->subject.' '.$class->section.' · '.$session->date->format('M j, Y')
+                .': '.$label($old).' → '.$label($new).' ('.$via.')',
+            $record,
+            ['old' => $old, 'new' => $new, 'via' => $via, 'student_id' => $student->id,
+                'class_id' => $class->id, 'session_id' => $session->id, 'date' => $session->date->toDateString()],
+        );
     }
 }

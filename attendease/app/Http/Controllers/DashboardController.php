@@ -17,7 +17,13 @@ class DashboardController extends Controller
     {
         $user = $request->user();
 
+        if ($user->isAdmin()) {
+            return redirect()->route('admin.dashboard');
+        }
+
+        // FR-ACL-03: a Teacher sees the classes they teach, a Student the classes they're in.
         $teaching = $user->taughtClasses()
+            ->when(! $user->isTeacher(), fn ($q) => $q->whereRaw('1 = 0'))
             ->withCount(['enrollments as pending_count' => fn ($q) => $q->where('status', Enrollment::PENDING)])
             ->withCount(['enrollments as student_count' => fn ($q) => $q->where('status', Enrollment::APPROVED)])
             ->orderByDesc('created_at')
@@ -25,6 +31,7 @@ class DashboardController extends Controller
             ->each(fn ($c) => $c->setAttribute('corrections_pending', $c->pendingCorrectionsCount())); // FR-ATT-18
 
         $enrolled = $user->enrollments()
+            ->when(! $user->isStudent(), fn ($q) => $q->whereRaw('1 = 0'))
             ->whereIn('status', [Enrollment::APPROVED, Enrollment::PENDING])
             ->with('schoolClass.teacher')
             ->orderByRaw("case when status = 'approved' then 0 else 1 end")

@@ -25,9 +25,12 @@ class AccessControlTest extends TestCase
         $this->get('/notifications')->assertRedirect('/login');
     }
 
-    public function test_fr_acl_01_there_is_no_role_column(): void
+    /** FR-ACL-03: every account has one role; a new account (sign-up) is a Student. */
+    public function test_fr_acl_03_accounts_have_a_role_and_default_to_student(): void
     {
-        $this->assertFalse(Schema::hasColumn('users', 'role'));
+        $this->assertTrue(Schema::hasColumn('users', 'role'));
+        $this->assertSame(User::STUDENT, (new User)->role);
+        $this->assertSame(User::STUDENT, User::factory()->create()->fresh()->role);
     }
 
     /** Acceptance: Teacher A gets 403 on every route for Teacher B's class. */

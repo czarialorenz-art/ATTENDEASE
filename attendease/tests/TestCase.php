@@ -28,7 +28,14 @@ abstract class TestCase extends BaseTestCase
 
     protected function makeClass(?User $teacher = null, array $attrs = []): SchoolClass
     {
-        return SchoolClass::factory()->for($teacher ?? User::factory()->create(), 'teacher')->create($attrs);
+        $teacher ??= User::factory()->teacher()->create();
+
+        // Roles are enforced (FR-ACL-03): whoever a test makes teach a class is a Teacher.
+        if (! $teacher->isTeacher()) {
+            $teacher->forceFill(['role' => User::TEACHER])->save();
+        }
+
+        return SchoolClass::factory()->for($teacher, 'teacher')->create($attrs);
     }
 
     protected function enroll(SchoolClass $class, ?User $student = null, string $status = Enrollment::APPROVED): User

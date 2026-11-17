@@ -15,6 +15,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // FR-ATT-07: the scan device ID is written by JavaScript, so it is not encrypted.
         $middleware->encryptCookies(except: ['ae_device']);
 
+        $middleware->alias(['role' => \App\Http\Middleware\EnsureRole::class]);
+        $middleware->appendToGroup('web', \App\Http\Middleware\EnsureUserIsActive::class);
+
         $middleware->redirectGuestsTo(fn () => route('login'));
         $middleware->redirectUsersTo(fn () => route('dashboard'));
     })
