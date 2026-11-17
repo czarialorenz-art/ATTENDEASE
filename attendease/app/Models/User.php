@@ -54,6 +54,16 @@ class User extends Authenticatable
         return $this->hasMany(UserDevice::class);
     }
 
+    /**
+     * Teaches at least one class and isn't a student (approved or pending) in any:
+     * the dashboard and top bar then hide student-only things such as "Classes I'm in" and Scan QR.
+     */
+    public function isTeacherOnly(): bool
+    {
+        return $this->taughtClasses()->exists()
+            && ! $this->enrollments()->whereIn('status', [Enrollment::APPROVED, Enrollment::PENDING])->exists();
+    }
+
     public function teaches(SchoolClass $class): bool
     {
         return (int) $class->teacher_id === (int) $this->id;

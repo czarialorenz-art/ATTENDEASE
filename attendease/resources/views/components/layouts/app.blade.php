@@ -20,10 +20,12 @@
             </a>
 
             <nav class="ml-auto flex items-center gap-1">
+                @if ($showScanner)
                 <a href="{{ route('scanner') }}" class="flex items-center gap-1.5 rounded-lg bg-gold-400 px-3 py-1.5 text-sm font-semibold text-brand-800 hover:bg-gold-500" aria-label="Scan attendance QR">
                     <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7V5a1 1 0 011-1h2M17 4h2a1 1 0 011 1v2M20 17v2a1 1 0 01-1 1h-2M7 20H5a1 1 0 01-1-1v-2M8 8h3v3H8zM13 13h3v3h-3zM13 8h3M8 13v3"/></svg>
                     <span class="hidden sm:inline">Scan QR</span>
                 </a>
+                @endif
                 <a href="{{ route('dashboard') }}" class="hidden rounded-lg px-3 py-1.5 text-sm hover:bg-white/10 md:inline">Dashboard</a>
                 <a href="{{ route('attendance.history') }}" class="hidden rounded-lg px-3 py-1.5 text-sm hover:bg-white/10 md:inline">My attendance</a>
 

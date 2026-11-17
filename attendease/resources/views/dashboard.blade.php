@@ -19,9 +19,11 @@
         <button class="btn-primary sm:w-40">Ask to join</button>
     </form>
 
+    {{-- Teacher-only (teaches classes, not a student anywhere): no student column, no "Classes I'm in". --}}
+    @php($teacherOnly = $teaching->isNotEmpty() && $enrolled->isEmpty())
     <div class="grid gap-6 lg:grid-cols-2">
         {{-- Teaching side --}}
-        <section class="space-y-6">
+        <section @class(['space-y-6' => ! $teacherOnly, 'grid items-start gap-6 lg:col-span-2 lg:grid-cols-2' => $teacherOnly])>
             <div class="card">
                 <h2 class="h2 mb-3">Classes I teach</h2>
                 @forelse ($teaching as $c)
@@ -53,6 +55,7 @@
         </section>
 
         {{-- Student side --}}
+        @unless ($teacherOnly)
         <section class="space-y-6">
             @if ($enrolled->where('status', 'approved')->isNotEmpty())
                 <a href="{{ route('scanner') }}" class="card flex items-center gap-4 border-brand-100 bg-brand-50 hover:bg-brand-100">
@@ -116,6 +119,7 @@
                 </div>
             @endif
         </section>
+        @endunless
     </div>
     @push('scripts')
     <script>
