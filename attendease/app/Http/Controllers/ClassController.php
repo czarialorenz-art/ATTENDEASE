@@ -67,48 +67,31 @@ class ClassController extends Controller
         return redirect()->route('classes.edit', $class)->with('status', 'Class details saved.');
     }
 
-    /** FR-CLS-03: weekly schedule rows and classroom location. */
-    public function updateSchedule(Request $request, SchoolClass $class)
+    /**
+     * FR-CLS-03: the classroom location (building, floor and room). Weekly schedules are added,
+     * edited and removed one at a time in ClassScheduleController (FR-CLS-12).
+     */
+    public function updateLocation(Request $request, SchoolClass $class)
     {
         $this->authorize('update', $class);
 
-        $rows = collect($request->input('schedules', []))
-            ->filter(fn ($r) => filled($r['day_of_week'] ?? null) || filled($r['start_time'] ?? null) || filled($r['end_time'] ?? null))
-            ->map(fn ($r) => array_intersect_key($r, array_flip(['day_of_week', 'start_time', 'end_time'])))
-            ->values()
-            ->all();
-        $request->merge(['schedules' => $rows]);
-
-        $data = $request->validate([
-            'schedules' => ['array'],
-            'schedules.*.day_of_week' => ['required', 'integer', 'between:0,6'],
-            'schedules.*.start_time' => ['required', 'date_format:H:i'],
-            'schedules.*.end_time' => ['required', 'date_format:H:i', 'after:schedules.*.start_time'],
-            // Classroom location: building, floor and room name.
+        $data = $request->validateWithBag('location', [
             'building' => ['nullable', 'string', 'max:100'],
             'floor' => ['nullable', 'string', 'max:50'],
             'room' => ['nullable', 'string', 'max:100'],
-        ], [
-            'schedules.*.end_time.after' => 'Each end time must be after its start time.',
         ]);
 
-        DB::transaction(function () use ($class, $data) {
-            $class->schedules()->delete();
-            foreach ($data['schedules'] ?? [] as $row) {
-                $class->schedules()->create($row); // rooms now live on the class, not on each row
-            }
-            $class->update([
-                'building' => filled($data['building'] ?? null) ? trim($data['building']) : null,
-                'floor' => filled($data['floor'] ?? null) ? trim($data['floor']) : null,
-                'room' => filled($data['room'] ?? null) ? trim($data['room']) : null,
-                // Map coordinates were removed from the form, so the distance (TOO_FAR) check is off.
-                'latitude' => null,
-                'longitude' => null,
-                'radius_m' => 100,
-            ]);
-        });
+        $class->update([
+            'building' => filled($data['building'] ?? null) ? trim($data['building']) : null,
+            'floor' => filled($data['floor'] ?? null) ? trim($data['floor']) : null,
+            'room' => filled($data['room'] ?? null) ? trim($data['room']) : null,
+            // Map coordinates were removed from the form, so the distance (TOO_FAR) check is off.
+            'latitude' => null,
+            'longitude' => null,
+            'radius_m' => 100,
+        ]);
 
-        return redirect()->route('classes.edit', $class)->with('status', 'Schedule and location saved.');
+        return redirect()->route('classes.edit', $class)->with('status', 'Classroom location saved.');
     }
 
     private function validated(Request $request): array

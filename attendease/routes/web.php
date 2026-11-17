@@ -13,6 +13,7 @@ use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\ClassController;
+use App\Http\Controllers\ClassScheduleController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EnrollmentController;
 use App\Http\Controllers\NotificationController;
@@ -67,7 +68,11 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
     Route::get('/classes/{class}', [ClassController::class, 'show'])->name('classes.show');
     Route::get('/classes/{class}/edit', [ClassController::class, 'edit'])->name('classes.edit');
     Route::put('/classes/{class}', [ClassController::class, 'update'])->name('classes.update');
-    Route::put('/classes/{class}/schedule', [ClassController::class, 'updateSchedule'])->name('classes.schedule');
+    Route::put('/classes/{class}/location', [ClassController::class, 'updateLocation'])->name('classes.location');
+    // FR-CLS-12: weekly schedules, one at a time
+    Route::post('/classes/{class}/schedules', [ClassScheduleController::class, 'store'])->name('schedules.store');
+    Route::put('/schedules/{schedule}', [ClassScheduleController::class, 'update'])->name('schedules.update');
+    Route::delete('/schedules/{schedule}', [ClassScheduleController::class, 'destroy'])->name('schedules.destroy');
     Route::get('/classes/{class}/students', [EnrollmentController::class, 'index'])->name('classes.students');
     Route::post('/enrollments/{enrollment}/approve', [EnrollmentController::class, 'approve'])->name('enrollments.approve');
     Route::post('/enrollments/{enrollment}/reject', [EnrollmentController::class, 'reject'])->name('enrollments.reject');

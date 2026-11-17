@@ -33,11 +33,14 @@
                 <p class="text-sm text-slate-500">No sessions yet.</p>
             @endforelse
 
-            <h2 class="h2 mt-6 mb-2">Weekly schedule</h2>
+            <div class="mt-6 mb-2 flex items-baseline justify-between gap-2">
+                <h2 class="h2">Weekly schedule</h2>
+                <a href="{{ route('classes.edit', $class) }}#schedules" class="text-sm font-medium text-brand-600 hover:underline">Manage schedule</a>
+            </div>
             @forelse ($class->schedules as $row)
-                <div class="text-sm">{{ $row->dayName() }} · {{ substr($row->start_time, 0, 5) }}–{{ substr($row->end_time, 0, 5) }}</div>
+                <div class="text-sm">{{ $row->dayName() }} · {{ $row->timeRange() }}</div>
             @empty
-                <p class="text-sm text-slate-500">No schedule set. <a href="{{ route('classes.edit', $class) }}" class="text-brand-600 hover:underline">Add one</a>.</p>
+                <p class="text-sm text-slate-500">No schedule set. <a href="{{ route('classes.edit', $class) }}#schedules" class="text-brand-600 hover:underline">Add one</a>.</p>
             @endforelse
             <p class="mt-2 text-sm text-slate-500">
                 Classroom: {{ $class->locationLabel() ?? 'not set' }}

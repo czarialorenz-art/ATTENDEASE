@@ -43,6 +43,7 @@ class AccessControlTest extends TestCase
         $session = AttendanceSession::factory()->for($class, 'schoolClass')->create();
         $record = AttendanceRecord::factory()->create(['attendance_session_id' => $session->id, 'student_id' => $student->id]);
         $flag = ScanFlag::factory()->create(['scan_log_id' => ScanLog::factory()->create(['attendance_record_id' => $record->id])->id]);
+        $schedule = \App\Models\ClassSchedule::factory()->create(['class_id' => $class->id]);
 
         $this->actingAs($teacherA);
 
@@ -50,7 +51,10 @@ class AccessControlTest extends TestCase
             ['get', "/classes/{$class->id}"],
             ['get', "/classes/{$class->id}/edit"],
             ['put', "/classes/{$class->id}"],
-            ['put', "/classes/{$class->id}/schedule"],
+            ['put', "/classes/{$class->id}/location"],
+            ['post', "/classes/{$class->id}/schedules"],
+            ['put', "/schedules/{$schedule->id}"],
+            ['delete', "/schedules/{$schedule->id}"],
             ['get', "/classes/{$class->id}/students"],
             ['post', "/enrollments/{$pending->id}/approve"],
             ['post', "/enrollments/{$pending->id}/reject"],

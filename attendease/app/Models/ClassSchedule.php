@@ -28,4 +28,22 @@ class ClassSchedule extends Model
     {
         return self::DAYS[$this->day_of_week] ?? '?';
     }
+
+    /** "8:00 AM – 9:30 AM" */
+    public function timeRange(): string
+    {
+        $fmt = fn ($t) => \Illuminate\Support\Carbon::createFromFormat('H:i', substr((string) $t, 0, 5))->format('g:i A');
+
+        return $fmt($this->start_time).' – '.$fmt($this->end_time);
+    }
+
+    /** "1 h 30 min" */
+    public function durationLabel(): string
+    {
+        $minutes = (strtotime(substr((string) $this->end_time, 0, 5)) - strtotime(substr((string) $this->start_time, 0, 5))) / 60;
+        $h = intdiv((int) $minutes, 60);
+        $m = (int) $minutes % 60;
+
+        return trim(($h ? $h.' h ' : '').($m ? $m.' min' : ''));
+    }
 }

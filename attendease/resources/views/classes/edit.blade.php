@@ -1,69 +1,113 @@
 <x-layouts.app :title="$class->subject.' settings'">
     <x-class-nav :class="$class" active="schedule" />
 
-    <div class="grid gap-6 lg:grid-cols-2">
-        <form method="POST" action="{{ route('classes.update', $class) }}" class="card space-y-4" novalidate>
-            @csrf @method('PUT')
-            <h2 class="h2">Class details</h2>
-            @include('classes._form')
-            <div class="flex justify-end"><button class="btn-primary">Save details</button></div>
-        </form>
+    @php
+        $hm = fn ($t) => substr((string) $t, 0, 5);
+        $addBag = $errors->getBag('addSchedule');
+        $locationErrors = $errors->getBag('location');
+    @endphp
 
-        <form method="POST" action="{{ route('classes.schedule', $class) }}" class="card space-y-4" novalidate>
-            @csrf @method('PUT')
-            <h2 class="h2">Weekly schedule</h2>
-
-            @php
-                $rows = old('schedules', $class->schedules->map(fn ($s) => [
-                    'day_of_week' => $s->day_of_week, 'start_time' => substr($s->start_time, 0, 5),
-                    'end_time' => substr($s->end_time, 0, 5),
-                ])->all());
-                $rows[] = ['day_of_week' => '', 'start_time' => '', 'end_time' => ''];
-            @endphp
-
-            <div id="schedule-rows" class="space-y-3">
-                @foreach ($rows as $i => $row)
-                    <div class="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 p-3 sm:grid-cols-[1.3fr_1fr_1fr]" data-row>
-                        <select name="schedules[{{ $i }}][day_of_week]" class="input col-span-2 sm:col-span-1" aria-label="Day">
-                            <option value="">Day…</option>
-                            @foreach (\App\Models\ClassSchedule::DAYS as $d => $name)
-                                <option value="{{ $d }}" @selected((string) ($row['day_of_week'] ?? '') === (string) $d)>{{ $name }}</option>
-                            @endforeach
-                        </select>
-                        <input type="time" name="schedules[{{ $i }}][start_time]" value="{{ $row['start_time'] ?? '' }}" class="input" aria-label="Start time">
-                        <input type="time" name="schedules[{{ $i }}][end_time]" value="{{ $row['end_time'] ?? '' }}" class="input" aria-label="End time">
-                        @foreach (['day_of_week', 'start_time', 'end_time'] as $f)
-                            @error("schedules.$i.$f")<p class="error col-span-full">{{ $message }}</p>@enderror
-                        @endforeach
-                    </div>
-                @endforeach
+    <div class="grid items-start gap-6 lg:grid-cols-2">
+        {{-- FR-CLS-12: weekly schedules, added, edited and removed one at a time --}}
+        <section class="card space-y-4" id="schedules">
+            <div class="flex items-baseline justify-between gap-2">
+                <h2 class="h2">Weekly schedule</h2>
+                <span class="text-sm text-slate-500">{{ $class->schedules->count() }} {{ \Illuminate\Support\Str::plural('schedule', $class->schedules->count()) }}</span>
             </div>
-            <button type="button" class="btn-secondary btn-sm" id="add-row">+ Add a row</button>
-            <p class="help">Leave a row blank to remove it.</p>
+
+            @if ($class->schedules->isEmpty())
+                <p class="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
+                    No schedules yet. Add the days and times this class meets below.
+                </p>
+            @else
+                <ul class="divide-y divide-slate-100 rounded-lg border border-slate-200" data-schedule-list>
+                    @foreach ($class->schedules as $s)
+                        @php($bag = 'schedule'.$s->id)
+                        <li class="px-4 py-3" data-schedule="{{ $s->id }}">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <div class="font-semibold">{{ $s->dayName() }}</div>
+                                    <div class="text-sm text-slate-600">{{ $s->timeRange() }} <span class="text-slate-400">· {{ $s->durationLabel() }}</span></div>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button type="button" class="btn-secondary btn-sm" data-edit-toggle="{{ $s->id }}"
+                                        aria-expanded="{{ $errors->getBag($bag)->any() ? 'true' : 'false' }}" aria-controls="edit-schedule-{{ $s->id }}">Edit</button>
+                                    <form method="POST" action="{{ route('schedules.destroy', $s) }}"
+                                          data-confirm="Remove the {{ $s->dayName() }} {{ $s->timeRange() }} schedule? Sessions already created are kept.">
+                                        @csrf @method('DELETE')
+                                        <button class="btn-secondary btn-sm text-red-600">Remove</button>
+                                    </form>
+                                </div>
+                            </div>
+
+                            {{-- Edit in place; opens by itself if this form has errors --}}
+                            <form method="POST" action="{{ route('schedules.update', $s) }}" id="edit-schedule-{{ $s->id }}"
+                                  @class(['mt-3 space-y-3 rounded-lg bg-slate-50 p-3', 'hidden' => ! $errors->getBag($bag)->any()]) novalidate>
+                                @csrf @method('PUT')
+                                @include('classes._schedule-fields', [
+                                    'key' => 'edit'.$s->id, 'bag' => $bag,
+                                    'values' => ['day_of_week' => $s->day_of_week, 'start_time' => $hm($s->start_time), 'end_time' => $hm($s->end_time)],
+                                ])
+                                <div class="flex justify-end gap-2">
+                                    <button type="button" class="btn-secondary btn-sm" data-edit-toggle="{{ $s->id }}">Cancel</button>
+                                    <button class="btn-primary btn-sm">Save changes</button>
+                                </div>
+                            </form>
+                        </li>
+                    @endforeach
+                </ul>
+            @endif
+
+            <form method="POST" action="{{ route('schedules.store', $class) }}" class="space-y-3 border-t border-slate-100 pt-4" novalidate>
+                @csrf
+                <h3 class="font-semibold">Add a schedule</h3>
+                @include('classes._schedule-fields', ['key' => 'add', 'bag' => 'addSchedule', 'values' => []])
+                <div class="flex justify-end"><button class="btn-primary">+ Add schedule</button></div>
+                <p class="help">A schedule can't overlap another schedule of this class or of your other classes this semester.</p>
+            </form>
+        </section>
+
+        <div class="space-y-6">
+            <form method="POST" action="{{ route('classes.update', $class) }}" class="card space-y-4" novalidate>
+                @csrf @method('PUT')
+                <h2 class="h2">Class details</h2>
+                @include('classes._form')
+                <div class="flex justify-end"><button class="btn-primary">Save details</button></div>
+            </form>
 
             {{-- FR-CLS-03: where the class meets --}}
-            <h2 class="h2 pt-2">Classroom location</h2>
-            <p class="text-sm text-slate-500">Shown to your students on their class page. All optional.</p>
-            <div class="grid gap-3 sm:grid-cols-3">
-                <x-field name="building" label="Building" :value="$class->building" maxlength="100" placeholder="e.g. Main Building" />
-                <x-field name="floor" label="Floor" :value="$class->floor" maxlength="50" placeholder="e.g. 3rd" />
-                <x-field name="room" label="Room" :value="$class->room" maxlength="100" placeholder="e.g. Tesda Lab" />
-            </div>
-
-            <div class="flex justify-end"><button class="btn-primary">Save schedule & location</button></div>
-        </form>
+            <form method="POST" action="{{ route('classes.location', $class) }}" class="card space-y-4" novalidate>
+                @csrf @method('PUT')
+                <div>
+                    <h2 class="h2">Classroom location</h2>
+                    <p class="text-sm text-slate-500">Shown to your students on their class page. All optional.</p>
+                </div>
+                <div class="grid gap-3 sm:grid-cols-3">
+                    @foreach (['building' => ['Building', 100, 'e.g. Main Building'], 'floor' => ['Floor', 50, 'e.g. 3rd'], 'room' => ['Room', 100, 'e.g. Tesda Lab']] as $f => [$label, $max, $ph])
+                        <div>
+                            <label for="loc_{{ $f }}" class="label">{{ $label }}</label>
+                            <input id="loc_{{ $f }}" name="{{ $f }}" maxlength="{{ $max }}" placeholder="{{ $ph }}"
+                                value="{{ $locationErrors->any() ? old($f) : $class->{$f} }}" @class(['input', 'input-error' => $locationErrors->has($f)])>
+                            @if ($locationErrors->has($f))<p class="error">{{ $locationErrors->first($f) }}</p>@endif
+                        </div>
+                    @endforeach
+                </div>
+                <div class="flex justify-end"><button class="btn-primary">Save location</button></div>
+            </form>
+        </div>
     </div>
 
     @push('scripts')
     <script>
-        document.getElementById('add-row').addEventListener('click', () => {
-            const wrap = document.getElementById('schedule-rows');
-            const last = wrap.querySelector('[data-row]:last-child');
-            const clone = last.cloneNode(true);
-            const n = wrap.querySelectorAll('[data-row]').length;
-            clone.querySelectorAll('[name]').forEach(el => { el.name = el.name.replace(/schedules\[\d+]/, `schedules[${n}]`); el.value = ''; });
-            clone.querySelectorAll('.error').forEach(el => el.remove());
-            wrap.appendChild(clone);
+        // Edit / Cancel open and close a schedule's edit form in place.
+        document.querySelectorAll('[data-edit-toggle]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const id = btn.dataset.editToggle;
+                const form = document.getElementById('edit-schedule-' + id);
+                const open = form.classList.toggle('hidden') === false;
+                document.querySelectorAll(`[data-edit-toggle="${id}"][aria-controls]`).forEach((b) => b.setAttribute('aria-expanded', open));
+                if (open) form.querySelector('select')?.focus();
+            });
         });
     </script>
     @endpush
