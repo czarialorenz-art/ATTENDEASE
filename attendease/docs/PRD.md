@@ -230,6 +230,8 @@ Three modules for Admin accounts: Dashboard, User Management and Activity Log.
 
 - **FR-ADM-18** *(new)* The heading row is found automatically: of the first 20 rows, the one with all the required headings (or else the most known headings) is used, and anything above it (school name, class title, dates, blank rows) is ignored. Skipped-row numbers still match the spreadsheet. If no row has the required headings, the error shows the closest row (with its row number) next to the expected headings.
 
+- **FR-ADM-19** *(new)* A teacher's **Department** is a dropdown from the fixed list in `config/students.php` (BSIT for now) on the admin Add/Edit form and the teacher's Profile. The teacher import checks the Department column against the same list (typed variants such as "Information Technology" are understood; anything else skips the row with the reason). A department typed before the list existed is shown as "(old value, not in the list)" and can be kept, but not given to other accounts.
+
 ### Activity Log
 
 - **FR-LOG-01** *(new)* Changes are recorded with spatie/laravel-activitylog (`activity_log` table): who did it, their role at the time, the action and the details.

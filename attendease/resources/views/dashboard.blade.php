@@ -67,7 +67,7 @@
         {{-- Student side --}}
         @if ($isStudent)
         {{-- Scanning is from the top bar's Scan QR button. --}}
-        <section class="grid items-start gap-6 lg:col-span-2 lg:grid-cols-2">
+        <section class="grid items-start gap-6 lg:col-span-2 lg:grid-cols-2 xl:grid-cols-3">
             <div class="card">
                 <h2 class="h2 mb-3">Classes I'm in</h2>
                 @forelse ($enrolled as $e)

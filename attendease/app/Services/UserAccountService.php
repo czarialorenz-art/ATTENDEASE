@@ -37,7 +37,7 @@ class UserAccountService
             // FR-ADM-13: optional; when given, a unique school address. Blank is stored as NULL, so it is never a duplicate.
             'email' => ['nullable', 'string', 'email', 'max:255', new SchoolEmail, Rule::unique('users', 'email')->ignore($ignore?->id)],
             ...$this->studentInfoRules($requireStudentInfo),
-            'department' => ['nullable', 'string', 'max:255'],
+            'department' => $this->departmentRules($ignore),
         ];
     }
 
@@ -54,6 +54,15 @@ class UserAccountService
             'year_level' => [$required, 'nullable', 'integer', Rule::in(StudentInfo::yearLevels())],
             'section' => [$required, 'nullable', Rule::in(StudentInfo::sections())],
         ];
+    }
+
+    /**
+     * FR-ADM-19: a department from the fixed list. A department typed before the list existed
+     * may be kept as it is, so saving a form never wipes it.
+     */
+    public function departmentRules(?User $user = null): array
+    {
+        return ['nullable', 'string', 'max:255', Rule::in(array_filter([...array_keys(StudentInfo::departments()), $user?->department]))];
     }
 
     public const ATTRIBUTE_NAMES = ['id_number' => 'ID number', 'name' => 'full name', 'email' => 'email', 'year_level' => 'year level'];

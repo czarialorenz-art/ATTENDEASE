@@ -14,7 +14,7 @@
                 {{-- FR-ADM-10: the same fixed lists as the admin uses --}}
                 <x-student-info-fields :user="$user" />
             @else
-                <x-field name="department" label="Department" :value="$user->department" placeholder="Optional" />
+                <x-department-field :user="$user" help="Optional." />
             @endif
             <div class="flex justify-end gap-2">
                 <a href="{{ route('password.edit') }}" class="btn-secondary">Change password</a>

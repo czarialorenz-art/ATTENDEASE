@@ -15,6 +15,12 @@ class StudentInfo
         return collect(config('students.courses', []))->map(fn ($c) => $c['name'] ?? '')->all();
     }
 
+    /** FR-ADM-19: a teacher's department, code => full name. */
+    public static function departments(): array
+    {
+        return collect(config('students.departments', []))->map(fn ($d) => $d['name'] ?? '')->all();
+    }
+
     /** @return list<int> */
     public static function yearLevels(): array
     {
@@ -74,9 +80,9 @@ class StudentInfo
     }
 
     /** @return array<string, list<string>> code => every spelling that means it, longest first */
-    private static function courseSpellings(): array
+    private static function courseSpellings(string $list = 'courses'): array
     {
-        return collect(config('students.courses', []))
+        return collect(config('students.'.$list, []))
             ->map(fn ($c, $code) => collect([$code, $c['name'] ?? '', ...($c['aliases'] ?? [])])
                 ->filter()->unique()->sortByDesc(fn ($s) => strlen($s))->values()->all())
             ->all();
@@ -103,6 +109,31 @@ class StudentInfo
         }
 
         return ['value' => null, 'error' => 'Course "'.$text.'" isn\'t in the list ('.implode(', ', array_keys(self::courses())).').'];
+    }
+
+    /**
+     * FR-ADM-19: "Information Technology", "bs it" ... → "BSIT".
+     *
+     * @return array{value: ?string, error: ?string} the department code, null when blank
+     */
+    public static function parseDepartment(mixed $text): array
+    {
+        $text = trim((string) $text);
+        if ($text === '') {
+            return ['value' => null, 'error' => null];
+        }
+
+        $typed = self::letters($text);
+        foreach (self::courseSpellings('departments') as $code => $spellings) {
+            foreach ($spellings as $spelling) {
+                $s = self::letters($spelling);
+                if ($s !== '' && ($typed === $s || str_contains($typed, $s))) {
+                    return ['value' => $code, 'error' => null];
+                }
+            }
+        }
+
+        return ['value' => null, 'error' => 'Department "'.$text.'" isn\'t in the list ('.implode(', ', array_keys(self::departments())).').'];
     }
 
     /**

@@ -22,4 +22,12 @@ return [
     // Section letters within a year level, e.g. 4th Year Section B.
     'sections' => ['A', 'B', 'C', 'D'],
 
+    // FR-ADM-19: a teacher's department, code => full name (same shape as courses).
+    'departments' => [
+        'BSIT' => [
+            'name' => 'Bachelor of Science in Information Technology',
+            'aliases' => ['BSIT', 'BS IT', 'BS Info Tech', 'Information Technology', 'Info Tech'],
+        ],
+    ],
+
 ];

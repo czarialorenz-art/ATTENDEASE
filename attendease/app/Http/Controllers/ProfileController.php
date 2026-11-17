@@ -37,7 +37,7 @@ class ProfileController extends Controller
             // FR-ADM-10: students pick course, year level and section from the fixed lists; others have a department.
             ...($user->isStudent()
                 ? $accounts->studentInfoRules(requiredForStudents: false)
-                : ['department' => ['nullable', 'string', 'max:255']]),
+                : ['department' => $accounts->departmentRules($user)]),
         ], [], ['id_number' => 'ID number', 'year_level' => 'year level']);
 
         if ($user->isStudent()) {

@@ -21,7 +21,7 @@
 </head>
 <body class="min-h-screen bg-slate-50 font-sans text-slate-900 antialiased">
     <header class="sticky top-0 z-30 border-b border-brand-800 bg-brand-600 text-white">
-        <div class="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5">
+        <div class="mx-auto flex max-w-screen-2xl items-center gap-3 px-4 py-2.5 sm:px-6 lg:px-8">
             <a href="{{ route('admin.dashboard') }}" class="flex min-w-0 items-center gap-2">
                 <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gold-400 text-sm font-black text-brand-800">MQ</span>
                 <span class="min-w-0 leading-tight">
@@ -53,7 +53,7 @@
         </div>
     </header>
 
-    <div class="mx-auto max-w-7xl px-4 py-5 sm:py-8 md:flex md:gap-8">
+    <div class="mx-auto max-w-screen-2xl px-4 py-5 sm:px-6 sm:py-8 md:flex md:gap-8 lg:px-8">
         {{-- FR-ADM-01: admin sidebar (a scrolling tab row on phones) --}}
         <aside class="mb-5 md:mb-0 md:w-56 md:shrink-0">
             <nav class="-mx-4 flex gap-1 overflow-x-auto px-4 pb-1 md:sticky md:top-20 md:mx-0 md:flex-col md:px-0" aria-label="Admin">

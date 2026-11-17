@@ -39,7 +39,7 @@
                 @endif
                 @error('role')<p class="error">{{ $message }}</p>@enderror
             </div>
-            <x-field name="department" label="Department" :value="$user->department" maxlength="255" help="Teachers only." />
+            <x-department-field :user="$user" help="Teachers only." />
         </div>
 
         {{-- FR-ADM-10 --}}

@@ -11,7 +11,7 @@
         'course' => $courses,
         'year_level' => '1 to 4 (also "1st", "4th Year")',
         'section' => $sections,
-        'department' => 'optional',
+        'department' => 'optional; '.implode(', ', array_keys(StudentInfo::departments())),
     ];
 @endphp
 <x-layouts.admin title="Import users">

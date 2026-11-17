@@ -316,6 +316,15 @@ class UserImportService
             } else {
                 $data['course'] = $data['year_level'] = $data['section'] = 'invalid'; // already explained; skip the "required" message
             }
+        } else {
+            // FR-ADM-19: the department must be one from the list ("Information Technology" → BSIT).
+            $department = StudentInfo::parseDepartment($data['department']);
+            if ($department['error']) {
+                $problems[] = $department['error'];
+                $data['department'] = 'invalid';
+            } else {
+                $data['department'] = $department['value'];
+            }
         }
 
         return [$data, $problems];
@@ -345,7 +354,7 @@ class UserImportService
         ], UserAccountService::ATTRIBUTE_NAMES);
 
         $errors = $validator->errors();
-        foreach (['course', 'year_level', 'section'] as $field) {
+        foreach (['course', 'year_level', 'section', 'department'] as $field) {
             if ($data[$field] === 'invalid') {
                 $errors->forget($field); // the parser already said what's wrong
             }

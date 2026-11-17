@@ -210,11 +210,11 @@ class AdminTest extends TestCase
             ->assertSessionHasErrors('password');
 
         $this->actingAs($admin)->post('/admin/users', [
-            'name' => 'Juan Dela Cruz', 'id_number' => 'T-100', 'email' => ' JUAN@'.config('app.allowed_email_domain'), 'role' => 'teacher', 'department' => 'CCS',
+            'name' => 'Juan Dela Cruz', 'id_number' => 'T-100', 'email' => ' JUAN@'.config('app.allowed_email_domain'), 'role' => 'teacher', 'department' => 'BSIT',
         ])->assertRedirect(route('admin.users.index'));
 
         $juan = User::where('id_number', 'T-100')->first();
-        $this->assertSame([User::TEACHER, $this->email('juan'), 'CCS'], [$juan->role, $juan->email, $juan->department]);
+        $this->assertSame([User::TEACHER, $this->email('juan'), 'BSIT'], [$juan->role, $juan->email, $juan->department]);
         $this->assertTrue(Hash::check(self::DEFAULT_PASSWORD, $juan->password)); // blank password = default
 
         $log = Activity::where('event', Audit::USER_ADDED)->sole();
@@ -266,6 +266,27 @@ class AdminTest extends TestCase
         $before = Activity::count();
         $this->actingAs($admin)->put("/admin/users/{$user->id}", [...$fields, 'role' => 'teacher']);
         $this->assertSame($before, Activity::count());
+    }
+
+    /** FR-ADM-19: department is a dropdown from the fixed list; an old typed value can be kept. */
+    public function test_department_is_a_dropdown_from_the_list(): void
+    {
+        $admin = $this->admin();
+        $this->actingAs($admin)->get('/admin/users/create')->assertOk()
+            ->assertSee('<select id="f_department" name="department"', false)->assertSee('<option value="BSIT"', false);
+
+        $base = ['name' => 'Ben Lim', 'id_number' => 'T-1', 'role' => 'teacher'];
+        $this->actingAs($admin)->post('/admin/users', [...$base, 'department' => 'Nursing'])->assertSessionHasErrors('department');
+        $this->actingAs($admin)->post('/admin/users', [...$base, 'department' => 'BSIT'])->assertSessionHasNoErrors();
+        $this->assertSame('BSIT', User::where('id_number', 'T-1')->value('department'));
+
+        // A department typed before the list existed is shown and can be kept, but not chosen for others.
+        $old = User::factory()->teacher()->create(['name' => 'Cara Uy', 'department' => 'CCS']);
+        $this->actingAs($admin)->get("/admin/users/{$old->id}/edit")->assertSee('CCS (old value, not in the list)');
+        $this->actingAs($admin)->put("/admin/users/{$old->id}", ['name' => 'Cara Uy', 'id_number' => $old->id_number, 'email' => $old->email, 'role' => 'teacher', 'department' => 'CCS'])
+            ->assertSessionHasNoErrors();
+        $this->assertSame('CCS', $old->fresh()->department);
+        $this->actingAs($admin)->put('/admin/users/'.User::where('id_number', 'T-1')->value('id'), [...$base, 'department' => 'CCS'])->assertSessionHasErrors('department');
     }
 
     public function test_admin_cannot_change_own_role_or_deactivate_self(): void
@@ -398,16 +419,19 @@ class AdminTest extends TestCase
         $d = config('app.allowed_email_domain');
         $file = $this->csv([
             'ID Number,Name,Email,Department,Role,Course',  // a Role column (or any other) is ignored
-            "T-001,Ben Lim,ben@{$d},CCS,Student,BSIT",
+            "T-001,Ben Lim,ben@{$d},Information Technology,Student,BSIT",  // department understood as BSIT
             'T-002,Cara Uy,,,,',
+            'T-003,Dan Go,,Nursing,,',                                   // department not in the list
         ], 'teachers.xlsx.csv');
 
-        $this->import('teacher', $file)->assertSessionHas('status', '2 imported, 0 skipped.');
+        $this->import('teacher', $file)->assertSessionHas('status', '2 imported, 1 skipped.');
+        $skipped = $this->actingAs($this->admin)->get('/admin/users/import')->viewData('result')['skipped'];
+        $this->assertSame(['Department "Nursing" isn\'t in the list (BSIT).'], $skipped[0]['reasons']);
 
         $ben = User::where('id_number', 'T-001')->sole();
-        $this->assertSame([User::TEACHER, 'CCS', null], [$ben->role, $ben->department, $ben->course]);
+        $this->assertSame([User::TEACHER, 'BSIT', null], [$ben->role, $ben->department, $ben->course]);
         $this->assertSame(User::TEACHER, User::where('id_number', 'T-002')->value('role'));
-        $this->assertSame('Teacher import from teachers.xlsx.csv: 2 teachers imported, 0 rows skipped; 1 without a school email', Activity::where('event', Audit::USERS_IMPORTED)->sole()->description);
+        $this->assertSame('Teacher import from teachers.xlsx.csv: 2 teachers imported, 1 row skipped; 1 without a school email', Activity::where('event', Audit::USERS_IMPORTED)->sole()->description);
     }
 
     /** FR-ADM-16: course / year level / section chosen on the page apply to every row. */
@@ -798,9 +822,14 @@ class AdminTest extends TestCase
         $this->actingAs($student)->put('/profile', [...$base, 'course' => 'BSIT', 'year_level' => 4, 'section' => 'B'])->assertSessionHasNoErrors();
         $this->assertSame(['BSIT', 4, 'B', null], [$student->fresh()->course, $student->fresh()->year_level, $student->fresh()->section, $student->fresh()->year]);
 
-        // Teachers have a department instead.
+        // Teachers have a department instead (FR-ADM-19: a dropdown).
         $teacher = User::factory()->teacher()->create();
-        $this->actingAs($teacher)->get('/profile')->assertSee('name="department"', false)->assertDontSee('name="year_level"', false);
+        $this->actingAs($teacher)->get('/profile')->assertSee('<select id="f_department" name="department"', false)->assertDontSee('name="year_level"', false);
+        $this->actingAs($teacher)->put('/profile', ['name' => $teacher->name, 'id_number' => $teacher->id_number, 'email' => $teacher->email, 'department' => 'Nursing'])
+            ->assertSessionHasErrors('department');
+        $this->actingAs($teacher)->put('/profile', ['name' => $teacher->name, 'id_number' => $teacher->id_number, 'email' => $teacher->email, 'department' => 'BSIT'])
+            ->assertSessionHasNoErrors();
+        $this->assertSame('BSIT', $teacher->fresh()->department);
     }
 
     public function test_report_shows_the_compact_course_year_section(): void
