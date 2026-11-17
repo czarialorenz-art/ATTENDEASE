@@ -16,6 +16,22 @@
     --color-brand-800: #11235a;
     --color-gold-400: #f5c542;
     --color-gold-500: #e3ad1b;
+
+    /* Readability on the picture background: the light grays used for secondary text
+       (dates, help text, table headings) are one shade darker than Tailwind's. */
+    --color-slate-400: #64748b;
+    --color-slate-500: #475569;
+}
+
+/* Desktop and laptop: everything a little bigger (text, spacing and buttons scale together,
+   since sizes are in rem). Phones and tablets keep the browser's normal 16px. */
+@layer base {
+    @media (min-width: 1024px) {
+        html { font-size: 17px; }
+    }
+    @media (min-width: 1536px) {
+        html { font-size: 18px; }
+    }
 }
 
 /*
