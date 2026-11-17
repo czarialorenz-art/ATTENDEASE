@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\AttendanceRecord;
 use App\Models\AttendanceSession;
-use App\Models\ScanFlag;
 use App\Models\SchoolClass;
 use App\Models\User;
 use App\Services\AttendanceService;
@@ -110,7 +109,7 @@ class AttendanceSessionController extends Controller
 
         $classId = $attendanceSession->class_id;
         $label = $attendanceSession->date->format('M j, Y');
-        $attendanceSession->forceDelete(); // records, scans and flags go with it (cascade)
+        $attendanceSession->forceDelete(); // records and scans go with it (cascade)
 
         return redirect()->route('sessions.index', [$classId, 'archived' => 1])
             ->with('status', "The {$label} session was deleted for good.");
@@ -164,13 +163,13 @@ class AttendanceSessionController extends Controller
         };
     }
 
-    /** FR-ATT-11/12: records, flags and manual edits. */
+    /** FR-ATT-12: records and manual edits. */
     public function show(AttendanceSession $attendanceSession)
     {
         $this->authorize('manage', $attendanceSession);
         $session = $attendanceSession->load('schoolClass');
 
-        $records = $session->records()->with(['scanLogs.flags.clearedBy'])->get()->keyBy('student_id');
+        $records = $session->records()->get()->keyBy('student_id');
         // Class lists are by surname: "Cruz, Ana", "Loreno, Maria Teresa A.", ...
         $students = $session->schoolClass->approvedStudents()->get()->sortBy(fn ($u) => $u->surnameSortKey(), SORT_NATURAL)->values();
 
@@ -178,18 +177,11 @@ class AttendanceSessionController extends Controller
         $extra = User::whereIn('id', $records->keys()->diff($students->pluck('id')))->get()
             ->sortBy(fn ($u) => $u->surnameSortKey(), SORT_NATURAL)->values();
 
-        $flags = ScanFlag::whereHas('scanLog.record', fn ($q) => $q->where('attendance_session_id', $session->id))
-            ->with(['scanLog.record.student', 'clearedBy'])
-            ->orderByRaw('cleared_at is not null')
-            ->latest()
-            ->get();
-
         return view('sessions.show', [
             'session' => $session,
             'class' => $session->schoolClass,
             'students' => $students->concat($extra),
             'records' => $records,
-            'flags' => $flags,
             'cancellation' => $session->schoolClass->cancellationOn($session->date), // FR-ANN-04
         ]);
     }
@@ -297,8 +289,6 @@ class AttendanceSessionController extends Controller
             'rotates_in' => app(QrTokenService::class)->secondsUntilRotation(),
             'count' => $session->records()->whereNotNull($column)->count(),
             'total' => $session->schoolClass->approvedStudents()->count(),
-            'flags' => ScanFlag::whereNull('cleared_at')
-                ->whereHas('scanLog.record', fn ($q) => $q->where('attendance_session_id', $session->id))->count(),
         ];
     }
 
@@ -323,17 +313,5 @@ class AttendanceSessionController extends Controller
         $this->attendance->setManualStatus($attendanceSession, $student, $data['status']);
 
         return back()->with('status', $student->name.' marked '.ucfirst($data['status']).'.');
-    }
-
-    /** FR-ATT-11: a cleared flag stays in the log. */
-    public function clearFlag(Request $request, ScanFlag $scanFlag)
-    {
-        $this->authorize('clear', $scanFlag);
-
-        if (! $scanFlag->isCleared()) {
-            $scanFlag->update(['cleared_by' => $request->user()->id, 'cleared_at' => now()]);
-        }
-
-        return back()->with('status', 'Flag cleared.');
     }
 }

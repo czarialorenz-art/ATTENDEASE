@@ -33,9 +33,6 @@ class ScanController extends Controller
     {
         $data = $request->validate([
             't' => ['required', 'string', 'max:500'],
-            'latitude' => ['nullable', 'numeric', 'between:-90,90'],
-            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
-            'accuracy' => ['nullable', 'numeric', 'min:0', 'max:1000000'],
             'device_id' => ['nullable', 'string', 'max:64'],
         ]);
 
@@ -52,9 +49,6 @@ class ScanController extends Controller
         $deviceId = $this->cleanDeviceId($request->cookie('ae_device')) ?? $this->cleanDeviceId($data['device_id'] ?? null);
 
         $result = $this->attendance->recordScan($session, $stage, $request->user(), [
-            'latitude' => $data['latitude'] ?? null,
-            'longitude' => $data['longitude'] ?? null,
-            'accuracy' => $data['accuracy'] ?? null,
             'device_id' => $deviceId,
             'ip' => $request->ip(),
         ]);

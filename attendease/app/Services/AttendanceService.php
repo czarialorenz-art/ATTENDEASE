@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\AttendanceRecord;
 use App\Models\AttendanceSession;
-use App\Models\ScanFlag;
 use App\Models\ScanLog;
 use App\Models\SchoolClass;
 use App\Models\User;
@@ -17,9 +16,6 @@ use Illuminate\Support\Facades\Notification;
 
 class AttendanceService
 {
-    public const IP_BURST_COUNT = 3;
-    public const IP_BURST_SECONDS = 3;
-
     /* ------------------------------------------------------------------
      | Stages (FR-ATT-02, FR-ATT-03, FR-ATT-13)
      * ------------------------------------------------------------------ */
@@ -180,9 +176,9 @@ class AttendanceService
      * ------------------------------------------------------------------ */
 
     /**
-     * Records a scan. Never blocks on suspicious signals: they become flags.
+     * Records a scan, with its time, IP and device in the scan log.
      *
-     * @param  array{latitude?: ?float, longitude?: ?float, accuracy?: ?float, device_id?: ?string, ip?: ?string}  $meta
+     * @param  array{device_id?: ?string, ip?: ?string}  $meta
      * @return array{record: AttendanceRecord, already: ?\Carbon\CarbonInterface, log: ?ScanLog}
      */
     public function recordScan(AttendanceSession $session, string $stage, User $student, array $meta): array
@@ -231,80 +227,15 @@ class AttendanceService
             return ['record' => $record, 'already' => $already, 'log' => null];
         }
 
-        $class = $session->schoolClass;
-        $lat = isset($meta['latitude']) ? (float) $meta['latitude'] : null;
-        $lng = isset($meta['longitude']) ? (float) $meta['longitude'] : null;
-        $distance = ($lat !== null && $lng !== null && $class->hasLocation())
-            ? self::haversine($lat, $lng, $class->latitude, $class->longitude)
-            : null;
-
         $log = ScanLog::create([
             'attendance_record_id' => $record->id,
             'stage' => $stage,
             'ip' => $meta['ip'] ?? null,
             'device_id' => $meta['device_id'] ?? null ?: null,
-            'latitude' => $lat,
-            'longitude' => $lng,
-            'accuracy' => $meta['accuracy'] ?? null,
-            'distance_m' => $distance !== null ? round($distance, 2) : null,
             'scanned_at' => $now,
         ]);
 
-        $this->applyFlags($log, $session, $class, $student);
-
         return ['record' => $record, 'already' => null, 'log' => $log];
-    }
-
-    /** FR-ATT-10: add one flag per matching rule. */
-    public function applyFlags(ScanLog $log, AttendanceSession $session, SchoolClass $class, User $student): void
-    {
-        if ($log->latitude === null || $log->longitude === null) {
-            $this->flag($log, ScanFlag::NO_LOCATION);
-        }
-
-        if ($log->distance_m !== null && $class->hasLocation() && $log->distance_m > $class->radius_m) {
-            $this->flag($log, ScanFlag::TOO_FAR);
-        }
-
-        if ($log->device_id) {
-            $shared = ScanLog::where('device_id', $log->device_id)
-                ->where('id', '!=', $log->id)
-                ->whereHas('record', fn ($q) => $q
-                    ->where('attendance_session_id', $session->id)
-                    ->where('student_id', '!=', $student->id))
-                ->exists();
-
-            if ($shared) {
-                $this->flag($log, ScanFlag::SHARED_DEVICE);
-            }
-        }
-
-        if ($log->ip) {
-            $burst = ScanLog::where('ip', $log->ip)
-                ->whereBetween('scanned_at', [$log->scanned_at->copy()->subSeconds(self::IP_BURST_SECONDS), $log->scanned_at])
-                ->whereHas('record', fn ($q) => $q->where('attendance_session_id', $session->id))
-                ->get();
-
-            if ($burst->count() >= self::IP_BURST_COUNT) {
-                $burst->each(fn (ScanLog $l) => $this->flag($l, ScanFlag::IP_BURST));
-            }
-        }
-    }
-
-    private function flag(ScanLog $log, string $code): void
-    {
-        ScanFlag::firstOrCreate(['scan_log_id' => $log->id, 'code' => $code]);
-    }
-
-    /** Great-circle distance in metres. */
-    public static function haversine(float $lat1, float $lng1, float $lat2, float $lng2): float
-    {
-        $r = 6371000;
-        $dLat = deg2rad($lat2 - $lat1);
-        $dLng = deg2rad($lng2 - $lng1);
-        $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
-
-        return 2 * $r * asin(min(1, sqrt($a)));
     }
 
     /** FR-LOG-02: e.g. "Juan Dela Cruz (2023-00001) · ITE101 BSIT-1A · Nov 12, 2026: Absent → Present (manual edit)". */

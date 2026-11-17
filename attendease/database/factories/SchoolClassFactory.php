@@ -18,12 +18,6 @@ class SchoolClassFactory extends Factory
             'semester' => '1st',
             'semester_start' => now()->subMonths(2)->toDateString(),
             'semester_end' => now()->addMonths(2)->toDateString(),
-            'radius_m' => 100,
         ];
-    }
-
-    public function located(float $lat = 14.6507, float $lng = 121.0494, int $radius = 100): static
-    {
-        return $this->state(['latitude' => $lat, 'longitude' => $lng, 'radius_m' => $radius]);
     }
 }

@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 /**
  * Archiving (FR-ATT-16) uses Laravel soft deletes on the archived_at column, so an archived
  * session drops out of every normal query: lists, reports, history and QR scans. It is
- * permanently deleted (with its records, scans and flags) one year after it was archived.
+ * permanently deleted (with its records and scans) one year after it was archived.
  */
 class AttendanceSession extends Model
 {

@@ -24,7 +24,7 @@ class SchoolClass extends Model
 
     protected $fillable = [
         'teacher_id', 'subject', 'year_level', 'section', 'school_term', 'semester',
-        'semester_start', 'semester_end', 'code', 'latitude', 'longitude', 'radius_m',
+        'semester_start', 'semester_end', 'code',
         'building', 'floor', 'room',
     ];
 
@@ -41,9 +41,6 @@ class SchoolClass extends Model
         return [
             'semester_start' => 'date',
             'semester_end' => 'date',
-            'latitude' => 'float',
-            'longitude' => 'float',
-            'radius_m' => 'integer',
         ];
     }
 
@@ -139,11 +136,6 @@ class SchoolClass extends Model
         return AttendanceCorrection::where('status', AttendanceCorrection::PENDING)
             ->whereHas('record', fn ($q) => $q->whereHas('attendanceSession', fn ($s) => $s->withTrashed()->where('class_id', $this->id)))
             ->count();
-    }
-
-    public function hasLocation(): bool
-    {
-        return $this->latitude !== null && $this->longitude !== null;
     }
 
     public function label(): string

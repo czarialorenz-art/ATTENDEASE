@@ -101,7 +101,7 @@
                                             <a href="{{ route('sessions.show', $s) }}" class="btn-secondary btn-sm">View</a>
                                             <form method="POST" action="{{ route('sessions.restore', $s) }}">@csrf<button class="btn-primary btn-sm">Restore</button></form>
                                             <form method="POST" action="{{ route('sessions.destroy', $s) }}"
-                                                  data-confirm="Delete the {{ $s->date->format('M j, Y') }} session for good? Its attendance records, scans and flags will be deleted too. This can't be undone.">
+                                                  data-confirm="Delete the {{ $s->date->format('M j, Y') }} session for good? Its attendance records and scans will be deleted too. This can't be undone.">
                                                 @csrf @method('DELETE')
                                                 <button class="btn-danger btn-sm">Delete</button>
                                             </form>

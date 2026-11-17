@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\AttendanceRecord;
 use App\Models\AttendanceSession;
-use App\Models\ScanFlag;
 use App\Models\SchoolClass;
 use App\Models\User;
 use App\Notifications\AbsenceAlert;
@@ -43,7 +42,7 @@ class AttendanceTest extends TestCase
     {
         return $this->actingAs($student)
             ->withServerVariables(['REMOTE_ADDR' => $ip])
-            ->postJson('/scan', array_merge(['t' => $token, 'latitude' => 14.6507, 'longitude' => 121.0494, 'accuracy' => 12], $extra));
+            ->postJson('/scan', array_merge(['t' => $token], $extra));
     }
 
     private function openTimeIn(AttendanceSession $s): void
@@ -246,20 +245,20 @@ class AttendanceTest extends TestCase
             ->assertRedirect(url('/scan?t='.$token));
     }
 
-    public function test_fr_att_07_scan_stores_location_device_and_ip(): void
+    public function test_fr_att_07_scan_stores_device_and_ip_without_asking_for_location(): void
     {
         $s = $this->makeSession();
         $this->openTimeIn($s);
         $student = $this->enroll($this->class);
 
-        $this->scan($student, $this->token($s), ['device_id' => '6f1c2b6e-1111-4a4a-9a9a-123456789abc', 'accuracy' => 8.5], '192.168.1.20')->assertOk();
+        $this->scan($student, $this->token($s), ['device_id' => '6f1c2b6e-1111-4a4a-9a9a-123456789abc'], '192.168.1.20')->assertOk();
 
         $this->assertDatabaseHas('scan_logs', [
             'stage' => 'time_in', 'ip' => '192.168.1.20', 'device_id' => '6f1c2b6e-1111-4a4a-9a9a-123456789abc',
         ]);
 
         $this->actingAs($student)->get('/scan?t='.$this->token($s))->assertOk()
-            ->assertSee('geolocation', false)->assertSee('timeout: 10000', false)->assertSee('localStorage', false);
+            ->assertSee('localStorage', false)->assertDontSee('geolocation', false)->assertDontSee('Checking your location');
     }
 
     public function test_fr_att_08_repeat_scan_says_already_recorded_and_changes_nothing(): void
@@ -299,97 +298,26 @@ class AttendanceTest extends TestCase
         $this->assertNotNull($record->time_out_at);
     }
 
-    /* ---------- Flags ---------- */
+    /* ---------- No flags ---------- */
 
-    public function test_fr_att_10_no_location_flag_does_not_block(): void
-    {
-        $s = $this->makeSession();
-        $this->openTimeIn($s);
-        $student = $this->enroll($this->class);
-
-        $this->scan($student, $this->token($s), ['latitude' => null, 'longitude' => null, 'accuracy' => null])->assertJson(['ok' => true]);
-
-        $this->assertDatabaseHas('attendance_records', ['student_id' => $student->id, 'status' => 'present']);
-        $this->assertSame(['NO_LOCATION'], ScanFlag::pluck('code')->all());
-    }
-
-    public function test_fr_att_10_too_far_flag_only_when_class_has_location(): void
-    {
-        $s = $this->makeSession();
-        $this->openTimeIn($s);
-        $a = $this->enroll($this->class);
-
-        // No class location: skipped.
-        $this->scan($a, $this->token($s), ['latitude' => 14.70, 'longitude' => 121.10]);
-        $this->assertSame(0, ScanFlag::where('code', 'TOO_FAR')->count());
-
-        $this->class->update(['latitude' => 14.6507, 'longitude' => 121.0494, 'radius_m' => 100]);
-        $near = $this->enroll($this->class);
-        $far = $this->enroll($this->class);
-        $this->scan($near, $this->token($s), ['latitude' => 14.6510, 'longitude' => 121.0494], '10.0.0.2'); // ~33 m
-        $this->scan($far, $this->token($s), ['latitude' => 14.6530, 'longitude' => 121.0494], '10.0.0.3');  // ~256 m
-
-        $flags = ScanFlag::where('code', 'TOO_FAR')->with('scanLog.record')->get();
-        $this->assertCount(1, $flags);
-        $this->assertSame($far->id, $flags[0]->scanLog->record->student_id);
-        $this->assertEqualsWithDelta(256, $flags[0]->scanLog->distance_m, 5);
-        $this->assertDatabaseHas('attendance_records', ['student_id' => $far->id, 'status' => 'present']);
-    }
-
-    public function test_fr_att_10_shared_device_flag(): void
+    /** Suspicious-scan flags were removed: scans never create flags and the page has no Flagged scans card. */
+    public function test_scans_create_no_flags_and_the_session_page_has_no_flag_section(): void
     {
         $s = $this->makeSession();
         $this->openTimeIn($s);
         $device = '6f1c2b6e-2222-4a4a-9a9a-123456789abc';
 
-        $this->scan($this->enroll($this->class), $this->token($s), ['device_id' => $device], '10.0.0.1');
-        $this->assertSame(0, ScanFlag::count());
-
-        $second = $this->enroll($this->class);
-        $this->scan($second, $this->token($s), ['device_id' => $device], '10.0.0.2')->assertJson(['ok' => true]);
-
-        $flag = ScanFlag::where('code', 'SHARED_DEVICE')->with('scanLog.record')->sole();
-        $this->assertSame($second->id, $flag->scanLog->record->student_id);
-    }
-
-    public function test_fr_att_10_ip_burst_flags_every_scan_in_the_burst(): void
-    {
-        $s = $this->makeSession();
-        $this->openTimeIn($s);
-
-        $this->scan($this->enroll($this->class), $this->token($s), [], '10.9.9.9');
-        $this->travel(1)->seconds();
-        $this->scan($this->enroll($this->class), $this->token($s), [], '10.9.9.9');
-        $this->assertSame(0, ScanFlag::where('code', 'IP_BURST')->count());
-        $this->travel(1)->seconds();
-        $this->scan($this->enroll($this->class), $this->token($s), [], '10.9.9.9');
-        $this->assertSame(3, ScanFlag::where('code', 'IP_BURST')->count());
-
-        // Slow scans from one IP are fine.
-        $this->travel(10)->seconds();
-        $this->scan($this->enroll($this->class), $this->token($s), [], '10.9.9.9');
-        $this->assertSame(3, ScanFlag::where('code', 'IP_BURST')->count());
-        $this->assertSame(4, AttendanceRecord::count());
-    }
-
-    public function test_fr_att_11_teacher_sees_and_clears_flags_which_stay_logged(): void
-    {
-        $s = $this->makeSession();
-        $this->openTimeIn($s);
-        $student = $this->enroll($this->class);
-        $this->scan($student, $this->token($s), ['latitude' => null, 'longitude' => null], '172.16.5.4');
-        $flag = ScanFlag::sole();
+        // What used to be flagged (same device, many scans from one IP) is simply recorded.
+        foreach (range(1, 3) as $i) {
+            $this->scan($this->enroll($this->class), $this->token($s), ['device_id' => $device], '10.9.9.9')->assertJson(['ok' => true]);
+        }
+        $this->assertSame(3, AttendanceRecord::where('status', 'present')->count());
+        $this->assertFalse(\Illuminate\Support\Facades\Schema::hasTable('scan_flags'));
 
         $this->actingAs($this->teacher)->get("/sessions/{$s->id}")->assertOk()
-            ->assertSee('NO_LOCATION')->assertSee('172.16.5.4')->assertSee($student->name);
-
-        $this->actingAs($this->teacher)->post("/flags/{$flag->id}/clear")->assertSessionHasNoErrors();
-
-        $flag->refresh();
-        $this->assertSame($this->teacher->id, $flag->cleared_by);
-        $this->assertNotNull($flag->cleared_at);
-        $this->assertDatabaseCount('scan_flags', 1);
-        $this->actingAs($this->teacher)->get("/sessions/{$s->id}")->assertSee('Cleared by');
+            ->assertDontSee('Flagged scans')->assertDontSee('NO_LOCATION')->assertDontSee('⚑');
+        $this->actingAs($this->teacher)->get("/sessions/{$s->id}/live")->assertOk()->assertDontSee('flagged');
+        $this->actingAs($this->teacher)->getJson("/sessions/{$s->id}/live/state")->assertJsonMissingPath('flags');
     }
 
     /* ---------- Manual and absences ---------- */
@@ -450,7 +378,7 @@ class AttendanceTest extends TestCase
         $other = $this->enroll($this->class);
         $s = $this->makeSession(['title' => 'Week 1']);
         $this->openTimeIn($s);
-        $this->scan($me, $this->token($s), ['latitude' => null, 'longitude' => null], '10.0.0.1');
+        $this->scan($me, $this->token($s), [], '10.0.0.1');
         $this->scan($other, $this->token($s), [], '10.0.0.2');
 
         $otherClass = $this->makeClass(null, ['subject' => 'OTHERSUBJ', 'school_term' => '2025-2026']);

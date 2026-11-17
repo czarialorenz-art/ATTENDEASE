@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\AttendanceRecord;
 use App\Models\AttendanceSession;
-use App\Models\ScanFlag;
 use App\Models\ScanLog;
 use App\Models\SchoolClass;
 use App\Models\User;
@@ -112,14 +111,12 @@ class SessionArchiveTest extends TestCase
     {
         $s = $this->makeSession(['date' => '2026-11-14']);
         $record = AttendanceRecord::factory()->create(['attendance_session_id' => $s->id, 'student_id' => $this->student->id]);
-        $flag = ScanFlag::factory()->create(['scan_log_id' => ScanLog::factory()->create(['attendance_record_id' => $record->id])->id]);
         $token = app(QrTokenService::class)->issue($s, 'time_in');
         $s->delete();
 
         $this->actingAs($this->teacher)->post("/sessions/{$s->id}/stages/time_in/open")->assertNotFound();
         $this->actingAs($this->teacher)->get("/sessions/{$s->id}/edit")->assertNotFound();
         $this->actingAs($this->teacher)->post("/sessions/{$s->id}/records", ['student_id' => $this->student->id, 'status' => 'late'])->assertNotFound();
-        $this->actingAs($this->teacher)->post("/flags/{$flag->id}/clear")->assertForbidden();
         $this->assertNull(app(QrTokenService::class)->verify($token));
     }
 
@@ -127,7 +124,7 @@ class SessionArchiveTest extends TestCase
     {
         $s = $this->makeSession(['title' => 'Mistake Session']);
         $record = AttendanceRecord::factory()->create(['attendance_session_id' => $s->id, 'student_id' => $this->student->id]);
-        ScanFlag::factory()->create(['scan_log_id' => ScanLog::factory()->create(['attendance_record_id' => $record->id])->id]);
+        ScanLog::factory()->create(['attendance_record_id' => $record->id]);
         $s->delete();
 
         $this->actingAs($this->teacher)->get("/classes/{$this->class->id}/sessions?archived=1")
@@ -140,7 +137,7 @@ class SessionArchiveTest extends TestCase
 
         $this->assertNull(AttendanceSession::withTrashed()->find($s->id));
         $this->assertDatabaseMissing('attendance_records', ['id' => $record->id]);
-        $this->assertSame(0, ScanFlag::count());
+        $this->assertSame(0, ScanLog::count());
     }
 
     public function test_only_archived_sessions_can_be_deleted_and_only_by_the_teacher(): void
@@ -280,7 +277,7 @@ class SessionArchiveTest extends TestCase
         $recent = $this->makeSession(['title' => 'recent']);
         $active = $this->makeSession(['title' => 'active']);
         $record = AttendanceRecord::factory()->create(['attendance_session_id' => $old->id, 'student_id' => $this->student->id]);
-        ScanFlag::factory()->create(['scan_log_id' => ScanLog::factory()->create(['attendance_record_id' => $record->id])->id]);
+        ScanLog::factory()->create(['attendance_record_id' => $record->id]);
 
         $old->delete();
         $this->travel(200)->days();
@@ -290,8 +287,8 @@ class SessionArchiveTest extends TestCase
         Artisan::call('model:prune', ['--model' => [AttendanceSession::class]]);
 
         $this->assertNull(AttendanceSession::withTrashed()->find($old->id));
-        $this->assertDatabaseMissing('attendance_records', ['id' => $record->id]); // its records, scans and flags go too
-        $this->assertSame(0, ScanFlag::count());
+        $this->assertDatabaseMissing('attendance_records', ['id' => $record->id]); // its records and scans go too
+        $this->assertSame(0, ScanLog::count());
         $this->assertNotNull(AttendanceSession::withTrashed()->find($recent->id));
         $this->assertNotNull(AttendanceSession::find($active->id));
     }

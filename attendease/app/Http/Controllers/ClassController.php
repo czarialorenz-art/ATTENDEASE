@@ -85,10 +85,6 @@ class ClassController extends Controller
             'building' => filled($data['building'] ?? null) ? trim($data['building']) : null,
             'floor' => filled($data['floor'] ?? null) ? trim($data['floor']) : null,
             'room' => filled($data['room'] ?? null) ? trim($data['room']) : null,
-            // Map coordinates were removed from the form, so the distance (TOO_FAR) check is off.
-            'latitude' => null,
-            'longitude' => null,
-            'radius_m' => 100,
         ]);
 
         return redirect()->route('classes.edit', $class)->with('status', 'Classroom location saved.');

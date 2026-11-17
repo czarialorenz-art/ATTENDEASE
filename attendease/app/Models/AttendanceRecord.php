@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
 class AttendanceRecord extends Model
 {
@@ -62,10 +61,5 @@ class AttendanceRecord extends Model
     {
         return isset(AttendanceCorrection::ALLOWED[$this->status])
             && ! ($this->relationLoaded('latestCorrection') ? $this->latestCorrection?->isPending() : $this->corrections()->where('status', AttendanceCorrection::PENDING)->exists());
-    }
-
-    public function flags(): HasManyThrough
-    {
-        return $this->hasManyThrough(ScanFlag::class, ScanLog::class);
     }
 }

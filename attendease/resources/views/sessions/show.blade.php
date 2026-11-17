@@ -1,5 +1,4 @@
 @use('App\Models\AttendanceSession', 'S')
-@use('App\Models\ScanFlag')
 @php
     $open = $session->openStage();
     $today = $session->isToday();
@@ -22,7 +21,7 @@
             @if ($archived)
                 <form method="POST" action="{{ route('sessions.restore', $session) }}">@csrf<button class="btn-primary">Restore session</button></form>
                 <form method="POST" action="{{ route('sessions.destroy', $session) }}"
-                      data-confirm="Delete this session for good? Its attendance records, scans and flags will be deleted too. This can't be undone.">
+                      data-confirm="Delete this session for good? Its attendance records and scans will be deleted too. This can't be undone.">
                     @csrf @method('DELETE')<button class="btn-danger">Delete</button>
                 </form>
             @elseif ($open)
@@ -85,7 +84,6 @@
                         <tbody>
                             @forelse ($students as $student)
                                 @php($r = $records->get($student->id))
-                                @php($flagCount = $r ? $r->scanLogs->flatMap->flags->whereNull('cleared_at')->count() : 0)
                                 <tr>
                                     <td>
                                         <div class="font-medium whitespace-nowrap">{{ $student->listName() }}</div>
@@ -94,7 +92,6 @@
                                     <td class="whitespace-nowrap">
                                         @if ($r)<span class="badge-{{ $r->status }}">{{ ucfirst($r->status) }}</span>
                                             @if ($r->source === 'manual')<span class="badge-neutral">manual</span>@endif
-                                            @if ($flagCount)<span class="badge-flag" title="Unreviewed flags">⚑ {{ $flagCount }}</span>@endif
                                         @else <span class="text-slate-400">—</span> @endif
                                     </td>
                                     <td class="whitespace-nowrap">{{ $r?->time_in_at?->format('g:i:s A') ?? '—' }}</td>
@@ -118,41 +115,6 @@
                                 </tr>
                             @empty
                                 <tr><td colspan="5" class="py-6 text-center text-slate-500">No approved students yet.</td></tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            {{-- Flags (FR-ATT-11) --}}
-            <div class="card">
-                <h2 class="h2 mb-1">Flagged scans</h2>
-                <p class="mb-3 text-sm text-slate-500">Flags never block a scan. Review each one and clear it if it's fine.</p>
-                <div class="table-wrap">
-                    <table class="table">
-                        <thead><tr><th>Student</th><th>Reason</th><th>Stage</th><th>Distance</th><th>IP</th><th>Time</th><th></th></tr></thead>
-                        <tbody>
-                            @forelse ($flags as $f)
-                                <tr @class(['opacity-60' => $f->isCleared()])>
-                                    <td class="whitespace-nowrap">{{ $f->scanLog->record->student->listName() }}</td>
-                                    <td><span class="badge-flag">{{ $f->code }}</span><div class="text-xs text-slate-500">{{ ScanFlag::DESCRIPTIONS[$f->code] ?? '' }}</div></td>
-                                    <td class="whitespace-nowrap">{{ S::stageLabel($f->scanLog->stage) }}</td>
-                                    <td class="whitespace-nowrap">
-                                        {{ $f->scanLog->distance_m !== null ? number_format($f->scanLog->distance_m).' m' : '—' }}
-                                        @if ($f->scanLog->accuracy !== null)<div class="text-xs text-slate-500">±{{ number_format($f->scanLog->accuracy) }} m</div>@endif
-                                    </td>
-                                    <td class="font-mono text-xs">{{ $f->scanLog->ip ?? '—' }}</td>
-                                    <td class="whitespace-nowrap">{{ $f->scanLog->scanned_at->format('g:i:s A') }}</td>
-                                    <td class="text-right whitespace-nowrap">
-                                        @if ($f->isCleared())
-                                            <span class="text-xs text-slate-500">Cleared by {{ $f->clearedBy?->name ?? 'teacher' }}<br>{{ $f->cleared_at->format('M j, g:i A') }}</span>
-                                        @elseif (! $archived)
-                                            <form method="POST" action="{{ route('flags.clear', $f) }}">@csrf<button class="btn-secondary btn-sm">Clear</button></form>
-                                        @endif
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr><td colspan="7" class="py-6 text-center text-slate-500">No flagged scans.</td></tr>
                             @endforelse
                         </tbody>
                     </table>

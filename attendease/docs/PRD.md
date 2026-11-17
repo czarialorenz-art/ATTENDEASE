@@ -8,7 +8,7 @@ This version describes the system as it is built today. It replaces v1 (Nov 12, 
 
 ## 1. Overview
 
-MTQ-AttendEase is a web app for QR-code attendance. Teachers run attendance for their classes with a rotating QR code; students scan it from their phones. The app records Time In and Time Out, flags suspicious scans for the teacher to review, and produces attendance reports.
+MTQ-AttendEase is a web app for QR-code attendance. Teachers run attendance for their classes with a rotating QR code; students scan it from their phones. The app records Time In and Time Out and produces attendance reports.
 
 **Stack:** Laravel 13 (PHP 8.3+) with a MySQL database. Blade + Tailwind CSS (built with Vite). Mobile-first responsive UI, since students scan from phone browsers.
 
@@ -24,7 +24,6 @@ Stored in `.env` and read through `config('app.school_name')`. Never hard-coded 
 
 - Replace paper roll calls with a rotating QR code that only works on the session date, while a stage is open.
 - Let students scan with either their phone's camera app or a scanner built into the app.
-- Flag suspicious scans for the teacher to review, without blocking students.
 - Produce attendance reports by day, week, month or semester, on screen and as PDF files.
 
 ### Non-goals
@@ -45,11 +44,11 @@ Every account has exactly one role: **Admin**, **Teacher** or **Student** (`user
 | Role | Can do | Cannot do |
 | --- | --- | --- |
 | **Admin** (the admin side) | See totals and today's classes, manage every account (add, edit, assign roles, deactivate, import), read the activity log | Teach or attend classes; change their own role; deactivate themselves |
-| **Teacher** (in classes they created) | Create classes; manage their students, schedule, location, sessions, flags, announcements, corrections and reports | Join classes, scan, or see classes created by someone else |
+| **Teacher** (in classes they created) | Create classes; manage their students, schedule, location, sessions, announcements, corrections and reports | Join classes, scan, or see classes created by someone else |
 | **Student** (approved member) | Join classes, scan attendance, view their own attendance, request corrections | Create classes; see other students' data; use teacher actions |
 
 - **FR-ACL-01** *(changed)* Every route is behind sign-in, except sign-up, log in, forgot password and reset password. Roles are enforced: the `role` middleware guards role-wide pages (the admin area: Admin; create a class: Teacher; join, scan, My attendance and correction requests: Student), and the class policies require both the role and the link to the class (a Teacher and `classes.teacher_id`; a Student and an approved enrollment). Anything else returns HTTP 403. A teacher whose role changes loses access to their classes until the Teacher role is given back.
-- **FR-ACL-02** Teacher-owned resources (class, session, scan flag, enrollment, report) are authorized with Laravel Policies, using route model binding plus `authorize()` on every action, including downloads and the live QR endpoint.
+- **FR-ACL-02** Teacher-owned resources (class, session, enrollment, report) are authorized with Laravel Policies, using route model binding plus `authorize()` on every action, including downloads and the live QR endpoint.
 - **FR-ACL-03** Student-facing reads are scoped on the server to `student_id = auth()->id()` and to classes where the student's enrollment is approved.
 - **FR-ACL-04** A missing or unauthorized resource returns 403 or 404 and never leaks its data.
 
@@ -99,7 +98,7 @@ A teacher creates a class and shares its code. Students ask to join with that co
 
 - **FR-CLS-01** Teachers create a class with: subject, year level, section, school term (e.g. "2026-2027"), semester (1st, 2nd or Summer), semester start date and semester end date. The end date must be after the start date.
 - **FR-CLS-02** Each class gets a unique 7-character code of uppercase letters and digits, leaving out the look-alikes 0/O and 1/I. The code is shown on the class page with a Copy button.
-- **FR-CLS-03** A teacher can edit a class's details and set its weekly schedule: one or more rows of day of week, start time and end time. The **classroom location** is the class's **building, floor and room** (all optional), shown to the teacher on the class overview ("Classroom: Tesda Lab · 3rd floor · Main Building") and to students on their class page. (Map coordinates and a radius were removed from the form, so the TOO_FAR distance check in FR-ATT-10 is off.)
+- **FR-CLS-03** A teacher can edit a class's details and set its weekly schedule: one or more rows of day of week, start time and end time. The **classroom location** is the class's **building, floor and room** (all optional), shown to the teacher on the class overview ("Classroom: Tesda Lab · 3rd floor · Main Building") and to students on their class page.
 - **FR-CLS-04** A student enters a class code and creates an enrollment with status `pending`. A wrong code gives a clear error. A duplicate request, a request for a class the student is already in, or a request to join one's own class is rejected.
 - **FR-CLS-05** The teacher sees pending requests and approves or rejects each one. Approving sets `approved`; rejecting sets `rejected`, and the student may ask again later.
 - **FR-CLS-06** A teacher can remove an approved student, which sets `removed`. The student loses access to the class, but their past attendance is kept for reports.
@@ -122,7 +121,7 @@ A teacher creates a class and shares its code. Students ask to join with that co
 
 ## 5. Attendance
 
-A teacher opens a dated session, runs a Time In stage and then a Time Out stage, and students scan a rotating QR code once per stage. Suspicious scans are recorded and flagged, never blocked.
+A teacher opens a dated session, runs a Time In stage and then a Time Out stage, and students scan a rotating QR code once per stage.
 
 ### Sessions and stages
 
@@ -134,7 +133,7 @@ A teacher opens a dated session, runs a Time In stage and then a Time Out stage,
 
 ### Rotating QR code
 
-- **FR-ATT-04** While a stage is open, the teacher's screen shows a full-screen QR code that changes every 30 seconds, a countdown to the next code, the number of students scanned out of those enrolled, and the number of unreviewed flags. The screen checks for updates every 5 seconds.
+- **FR-ATT-04** While a stage is open, the teacher's screen shows a full-screen QR code that changes every 30 seconds, a countdown to the next code and the number of students scanned out of those enrolled. The screen checks for updates every 5 seconds.
 - **FR-ATT-05** The QR encodes a URL such as `/scan?t=<token>`. The token is signed with HMAC using `APP_KEY` and carries session ID, stage and issue time. The server accepts it only if:
   - its signature is valid;
   - it is the current 30-second token or the one just before it (an overlap for slow phones);
@@ -147,31 +146,22 @@ A teacher opens a dated session, runs a Time In stage and then a Time Out stage,
 
 - **FR-ATT-06** A student scans with the phone's normal camera app, which opens the URL in the browser. If not signed in, the student logs in and is returned to the scan. Only students with an approved enrollment in that class can record attendance.
 - **FR-ATT-06a** *(new)* The app also has its own QR scanner (`/scanner`), linked from the top bar on every page, from the dashboard, and from "Scan again" on any failed scan. It uses the phone's back camera, accepts only this app's own scan links, and opens the same scan page as FR-ATT-06. It shows clear messages when the camera is blocked, missing or busy, or when the page isn't on HTTPS.
-- **FR-ATT-07** The scan page asks for the browser's location (10-second timeout), then posts the token, latitude, longitude, accuracy and a device ID. The device ID is a random UUID kept in a long-lived cookie and in localStorage.
+- **FR-ATT-07** *(changed)* The scan page posts the token and a device ID right away; it doesn't ask for the phone's location. Each scan's time, IP and device are kept in the scan log. The device ID is a random UUID kept in a long-lived cookie and in localStorage.
 - **FR-ATT-08** There is one record per student per session. A repeat scan in the same stage shows "Already recorded at <time>" and changes nothing.
 - **FR-ATT-09** Time In status: **Present** if the scan time is within the Time In opening time + grace minutes, otherwise **Late**. A Time Out scan records the time and keeps that status.
 
-### Suspicious-scan flags (record, never block)
+### Suspicious-scan flags *(removed)*
 
-- **FR-ATT-10** Each scan is saved, then checked. A flag is added for each rule that matches:
-
-| Flag code | Rule |
-| --- | --- |
-| `NO_LOCATION` | Location was denied, unavailable or timed out |
-| `TOO_FAR` | Distance from the class's map location is greater than its radius; skipped when the class has no map coordinates, which is now always (the coordinates were removed from the form, FR-CLS-03) |
-| `SHARED_DEVICE` | The same device ID has already scanned for a different student in the same session |
-| `IP_BURST` | 3 or more scans from the same IP in the same session within 3 seconds; every scan in that burst is flagged |
-
-- **FR-ATT-11** The teacher's session page lists flagged scans with the student, reason, stage, distance (and GPS accuracy), IP and time. The teacher can clear a flag, which records `cleared_by` and `cleared_at`. A cleared flag stays in the log.
+- **FR-ATT-10** / **FR-ATT-11** *(removed)* Scans are no longer checked or flagged (no NO_LOCATION, TOO_FAR, SHARED_DEVICE or IP_BURST), and the session page has no Flagged scans list. The `scan_flags` table and the location columns were dropped.
 
 ### Manual changes and absences
 
 - **FR-ATT-12** A teacher can set any enrolled student's status to Present, Late or Absent by hand. Manual entries are marked `source = manual`.
 - **FR-ATT-13** When Time Out closes, every approved student missing a Time In or Time Out is marked Absent and gets an absence alert (FR-NOTIF-02). Statuses the teacher set by hand are left as they are. The teacher can still change any status afterwards.
-- **FR-ATT-14** Students can view their own attendance history, filtered by class and school term. It shows date, class, status, and Time In and Time Out times, but no flag details.
+- **FR-ATT-14** Students can view their own attendance history, filtered by class and school term. It shows date, class, status, and Time In and Time Out times.
 - **FR-ATT-16** *(new)* Each session in the Sessions list has an **Edit** menu with two choices:
   - **Edit session:** change the title and grace period at any time, and the date only until Time In has been opened.
-  - **Archive:** hides the session from the active list, reports, the dashboard and students' records. Not allowed while a stage is open. Archived sessions are listed under **Archived**, read-only, with the date they will be deleted, and can be **restored** or **deleted** right away (after a confirmation; only archived sessions can be deleted). **One year after archiving, the session is deleted for good** with its records, scans and flags (a daily scheduled `model:prune`, with the Sessions page also cleaning up as a backup).
+  - **Archive:** hides the session from the active list, reports, the dashboard and students' records. Not allowed while a stage is open. Archived sessions are listed under **Archived**, read-only, with the date they will be deleted, and can be **restored** or **deleted** right away (after a confirmation; only archived sessions can be deleted). **One year after archiving, the session is deleted for good** with its records and scans (a daily scheduled `model:prune`, with the Sessions page also cleaning up as a backup).
 - **FR-ATT-17** *(new)* When the teacher opens Time In for the first time in a session, every approved student in the class gets a "Time In is open" notification (in-app and email) with the class, the session title, the time they must scan by to be marked Present (opening time + grace period), and a link to the scanner. Reopening Time In, opening Time Out, or a failed attempt to open sends nothing.
 - **FR-ATT-18** *(new)* **Correction requests.** In their attendance history, each Absent or Late record has a **Request correction** button. The student picks the correct status (Absent → Present or Late; Late → Present) and gives a reason (10–1000 characters). Each request is **Pending**, **Approved** or **Rejected**, shown on the record with any note from the teacher. Only one pending request per record at a time; after a rejection the student may ask again. Only the record's own student, while approved in the class, can ask, and not for an archived session. The teacher reviews requests on the class's **Corrections** tab (pending count shown on the tab and on the dashboard), with an optional note. Approving changes the record to the requested status as a teacher change (`source = manual`), so it counts in reports. Both sides are notified.
 - **FR-ATT-19** *(new)* **Sessions stay inside the semester.** A session can't be created, or have its date changed, outside the class's semester start and end dates; the error says why (e.g. "This date is after the semester ends (Nov 14, 2026); it wouldn't count in semester totals") with a **Fix semester dates** link. The New session form limits the date picker to the semester, shows the semester range, and warns live as soon as an outside date is picked. Sessions already outside the semester (e.g. after the semester dates were changed) are marked **Outside semester** in the list and get a banner with the same link; their title and grace period can still be edited.
@@ -279,15 +269,14 @@ All tables have `id` and timestamps. Foreign keys use `constrained()`.
 | `user_devices` | user_id, token_hash, user_agent, ip, last_seen_at |
 | `password_reset_tokens` | email, token (hashed), created_at; expires after 15 minutes, single use |
 | `sessions` | Laravel database session driver |
-| `classes` | teacher_id, subject, year_level, section, school_term, semester, semester_start, semester_end, code (unique), building, floor, room; latitude, longitude, radius_m (no longer set) |
+| `classes` | teacher_id, subject, year_level, section, school_term, semester, semester_start, semester_end, code (unique), building, floor, room |
 | `class_schedules` | class_id, day_of_week, start_time, end_time (room no longer used) |
 | `enrollments` | class_id, student_id, status (pending / approved / rejected / removed), decided_at; unique(class_id, student_id) |
 | `attendance_sessions` | class_id, date, title, grace_minutes (default 15), time_in_opened_at, time_in_closed_at, time_out_opened_at, time_out_closed_at, archived_at (soft delete; FR-ATT-16) |
 | `attendance_records` | attendance_session_id, student_id, status (present / late / absent), time_in_at, time_out_at, source (qr / manual); unique(session, student) |
 | `announcements` | class_id, author_id, type (general / cancellation), title, body, cancelled_date (FR-ANN) |
 | `attendance_corrections` | attendance_record_id, student_id, current_status, requested_status, reason, status (pending / approved / rejected), teacher_note, decided_by, decided_at (FR-ATT-18) |
-| `scan_logs` | attendance_record_id, stage, ip, device_id, latitude, longitude, accuracy, distance_m, scanned_at |
-| `scan_flags` | scan_log_id, code (NO_LOCATION / TOO_FAR / SHARED_DEVICE / IP_BURST), cleared_by, cleared_at; unique(scan_log_id, code) |
+| `scan_logs` | attendance_record_id, stage, ip, device_id, scanned_at |
 | `notifications` | Laravel default |
 | `activity_log` | spatie/laravel-activitylog: log_name, description (details), event (action type), subject, causer, properties (old / new values, causer_role), created_at (FR-LOG) |
 
@@ -304,7 +293,7 @@ Laravel's `cache`, `jobs` and `failed_jobs` tables are also used (rate limiting,
   - Students: join requests, enrolled students and removed students, each with section.
   - Schedule & location: class details, weekly schedule rows, classroom location.
   - Sessions: list and "New session" form.
-  - Session detail: stage controls, attendance table with manual status changes, flagged scans, settings.
+  - Session detail: stage controls, attendance table with manual status changes, settings.
   - Live QR screen for an open stage (full screen).
   - Report: period picker, on-screen report, PDF download.
 - **As a class's student:**
@@ -319,7 +308,7 @@ Laravel's `cache`, `jobs` and `failed_jobs` tables are also used (rate limiting,
 - **Timezone:** Asia/Manila for all date logic. Session dates are compared as local dates.
 - **Performance:** the live QR screen checks for updates every 5 seconds and stays responsive with 60 students scanning at once.
 - **Mobile:** the scan page and the in-app scanner work in current Chrome (Android) and Safari (iOS). Geolocation and camera access need HTTPS.
-- **Testing:** a feature test for each requirement (PHPUnit, in-memory SQLite), with factories for every model. Test names carry the requirement ID, e.g. `test_fr_att_10_ip_burst_flags_every_scan_in_the_burst`.
+- **Testing:** a feature test for each requirement (PHPUnit, in-memory SQLite), with factories for every model. Test names carry the requirement ID, e.g. `test_fr_att_09_time_in_status_present_within_grace_late_after`.
 
 ---
 
@@ -343,7 +332,6 @@ Laravel's `cache`, `jobs` and `failed_jobs` tables are also used (rate limiting,
 - [ ] A QR token older than about 60 seconds, from another date, or from a closed stage is rejected.
 - [ ] The in-app scanner opens the scan page for this app's QR codes and ignores other QR codes.
 - [ ] A scan within the grace period is Present, after it Late, and a second scan in the same stage is refused. A student with no Time Out is Absent once Time Out closes.
-- [ ] Each of the 4 flag rules creates a flag without blocking the scan, and the teacher can clear it.
 - [ ] The report shows the right counts for a day, a week, a month and the semester, and includes each student's section.
 - [ ] The report downloads as a PDF for the chosen period; students get 403.
 - [ ] A student's class page and history show only their own attendance, enforced on the server.
@@ -364,6 +352,7 @@ Laravel's `cache`, `jobs` and `failed_jobs` tables are also used (rate limiting,
 | Notifications | "Submission checked" removed with submissions. |
 | Roles (FR-ACL) | **Changed:** one role per account (Admin / Teacher / Student), enforced; was per class with no role column. |
 | Admin side (FR-ADM, FR-LOG) | **Added:** admin dashboard, user management with CSV/Excel import, and the activity log. |
+| Suspicious-scan flags (FR-ATT-10, FR-ATT-11) | **Removed:** no NO_LOCATION / TOO_FAR / SHARED_DEVICE / IP_BURST flags, no Flagged scans card, and the scan page no longer asks for location. |
 
 ---
 

@@ -95,7 +95,6 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
     Route::get('/sessions/{attendanceSession}/live', [AttendanceSessionController::class, 'live'])->name('sessions.live');
     Route::get('/sessions/{attendanceSession}/live/state', [AttendanceSessionController::class, 'liveState'])->name('sessions.live.state');
     Route::post('/sessions/{attendanceSession}/records', [AttendanceSessionController::class, 'manual'])->name('sessions.manual');
-    Route::post('/flags/{scanFlag}/clear', [AttendanceSessionController::class, 'clearFlag'])->name('flags.clear');
 
     Route::middleware('role:student')->group(function () {
         Route::view('/scanner', 'scan.scanner')->name('scanner'); // in-app camera QR reader

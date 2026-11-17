@@ -15,10 +15,6 @@ class ScanLogFactory extends Factory
             'stage' => 'time_in',
             'ip' => fake()->ipv4(),
             'device_id' => (string) Str::uuid(),
-            'latitude' => 14.6507,
-            'longitude' => 121.0494,
-            'accuracy' => 15,
-            'distance_m' => 0,
             'scanned_at' => now(),
         ];
     }

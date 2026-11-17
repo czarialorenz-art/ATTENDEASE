@@ -7,7 +7,7 @@
 
             <div id="busy" class="mt-6 flex flex-col items-center gap-3">
                 <div class="h-10 w-10 animate-spin rounded-full border-4 border-brand-100 border-t-brand-600"></div>
-                <p id="busy-msg" class="text-sm text-slate-600">Checking your location…</p>
+                <p id="busy-msg" class="text-sm text-slate-600">Recording…</p>
             </div>
 
             <div id="result" class="mt-6 hidden"></div>
@@ -46,17 +46,6 @@
                 return id;
             }
 
-            function getLocation() {
-                return new Promise(resolve => {
-                    if (!navigator.geolocation) return resolve(null);
-                    navigator.geolocation.getCurrentPosition(
-                        p => resolve(p.coords),
-                        () => resolve(null), // denied, unavailable or timed out: still record, server flags it
-                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-                    );
-                });
-            }
-
             function show(ok, title, message) {
                 document.getElementById('busy').classList.add('hidden');
                 const box = document.getElementById('result');
@@ -77,16 +66,9 @@
             }
 
             (async () => {
-                const coords = await getLocation();
-                document.getElementById('busy-msg').textContent = 'Recording…';
                 const body = new FormData();
                 body.append('t', token);
                 body.append('device_id', deviceId());
-                if (coords) {
-                    body.append('latitude', coords.latitude);
-                    body.append('longitude', coords.longitude);
-                    body.append('accuracy', coords.accuracy);
-                }
                 try {
                     const res = await fetch(postUrl, { method: 'POST', body, headers: { 'X-CSRF-TOKEN': csrf, Accept: 'application/json' } });
                     const data = await res.json().catch(() => ({}));

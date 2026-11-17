@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\AttendanceRecord;
 use App\Models\AttendanceSession;
 use App\Models\Enrollment;
-use App\Models\ScanFlag;
 use App\Models\ScanLog;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -42,7 +41,6 @@ class AccessControlTest extends TestCase
         $pending = Enrollment::factory()->create(['class_id' => $class->id]);
         $session = AttendanceSession::factory()->for($class, 'schoolClass')->create();
         $record = AttendanceRecord::factory()->create(['attendance_session_id' => $session->id, 'student_id' => $student->id]);
-        $flag = ScanFlag::factory()->create(['scan_log_id' => ScanLog::factory()->create(['attendance_record_id' => $record->id])->id]);
         $schedule = \App\Models\ClassSchedule::factory()->create(['class_id' => $class->id]);
 
         $this->actingAs($teacherA);
@@ -67,7 +65,6 @@ class AccessControlTest extends TestCase
             ['get', "/sessions/{$session->id}/live"],
             ['get', "/sessions/{$session->id}/live/state"],
             ['post', "/sessions/{$session->id}/records"],
-            ['post', "/flags/{$flag->id}/clear"],
             ['get', "/classes/{$class->id}/report"],
             ['get', "/classes/{$class->id}/report.pdf"],
         ];
@@ -114,6 +111,5 @@ class AccessControlTest extends TestCase
         $this->get('/classes/999999')->assertNotFound();
         $this->get('/sessions/999999')->assertNotFound();
         $this->get('/sessions/999999/live')->assertNotFound();
-        $this->post('/flags/999999/clear')->assertNotFound();
     }
 }

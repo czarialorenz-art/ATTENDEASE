@@ -31,7 +31,7 @@
                 <div id="stage" class="inline-block rounded-full bg-gold-400 px-4 py-1 text-lg font-bold text-brand-800">{{ $state['stage_label'] ?? 'Closed' }}</div>
                 <div class="mt-4 text-7xl font-black tabular-nums sm:text-8xl"><span id="count">{{ $state['count'] }}</span><span class="text-3xl font-semibold text-brand-100">/<span id="total">{{ $state['total'] }}</span></span></div>
                 <div class="text-lg text-brand-100">students scanned</div>
-                <div class="mt-4 text-sm text-brand-100">New code in <span id="rotate" class="font-semibold text-white tabular-nums">{{ $state['rotates_in'] }}</span>s · <span id="flags">{{ $state['flags'] }}</span> flagged</div>
+                <div class="mt-4 text-sm text-brand-100">New code in <span id="rotate" class="font-semibold text-white tabular-nums">{{ $state['rotates_in'] }}</span>s</div>
                 <p class="mt-6 max-w-xs text-sm text-brand-100">Scan with your phone's camera. The code changes every 30 seconds and only works today, while this stage is open.</p>
             </div>
         </div>
@@ -62,7 +62,6 @@
                     el('stage').textContent = s.stage_label || 'Closed';
                     el('count').textContent = s.count;
                     el('total').textContent = s.total;
-                    el('flags').textContent = s.flags;
                     rotatesIn = s.rotates_in;
                 } catch (e) { /* network blip: try again on the next tick */ }
                 finally { busy = false; }

@@ -78,18 +78,13 @@ class ClassEnrollmentTest extends TestCase
         $this->actingAs($class->teacher)->put("/classes/{$class->id}", $this->classData(['section' => 'B']))->assertSessionHasNoErrors();
         $this->assertSame('B', $class->fresh()->section);
 
-        $class->update(['latitude' => 14.65, 'longitude' => 121.04]); // from before the map fields were removed
-
         $this->actingAs($class->teacher)->put("/classes/{$class->id}/location", [
             'building' => ' Main Building ', 'floor' => '3rd', 'room' => 'Tesda Lab',
-            'latitude' => '1', 'longitude' => '2', 'radius_m' => '50', // no longer accepted
         ])->assertSessionHasNoErrors();
 
         $class->refresh();
         $this->assertSame(['Main Building', '3rd', 'Tesda Lab'], [$class->building, $class->floor, $class->room]);
         $this->assertSame('Tesda Lab · 3rd floor · Main Building', $class->locationLabel());
-        $this->assertNull($class->latitude); // the distance check is off now
-        $this->assertFalse($class->hasLocation());
 
         // The form has Building / Floor / Room and no map fields or per-row room.
         $this->actingAs($class->teacher)->get("/classes/{$class->id}/edit")->assertOk()
