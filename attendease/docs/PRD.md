@@ -228,6 +228,8 @@ Three modules for Admin accounts: Dashboard, User Management and Activity Log.
 - **FR-ADM-16** *(new)* For a Student import, the page has **Course**, **Year level** and **Section** dropdowns (only shown when Import as = Students). They are optional: each starts on "Not set", and choosing a value gives it to every row (a chosen value wins over a column in the file). Left unset, the students are imported without it and can get it later in User Management → Edit or on their Profile. The summary and the Activity Log say what was set for every row.
 - **FR-ADM-17** *(new)* In an import, an email that isn't a valid @mqcqc.ph.education address doesn't skip the row: the account is imported **without** the email. After the import, an alert lists every imported account with no school email (left out, or blank in the file), with the row, ID number, name and reason, so the admin can follow up; they log in with their ID number meanwhile. Duplicate emails are still skipped. The Activity Log entry includes how many have no school email.
 
+- **FR-ADM-18** *(new)* The heading row is found automatically: of the first 20 rows, the one with all the required headings (or else the most known headings) is used, and anything above it (school name, class title, dates, blank rows) is ignored. Skipped-row numbers still match the spreadsheet. If no row has the required headings, the error shows the closest row (with its row number) next to the expected headings.
+
 ### Activity Log
 
 - **FR-LOG-01** *(new)* Changes are recorded with spatie/laravel-activitylog (`activity_log` table): who did it, their role at the time, the action and the details.

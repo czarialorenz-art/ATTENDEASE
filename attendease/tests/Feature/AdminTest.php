@@ -465,6 +465,47 @@ class AdminTest extends TestCase
         }
     }
 
+    /** FR-ADM-18: titles, dates and blank rows above the headings are skipped. */
+    public function test_import_finds_the_heading_row_below_titles_and_dates(): void
+    {
+        $d = config('app.allowed_email_domain');
+        $file = $this->csv([
+            'MARY THE QUEEN COLLEGE OF QUEZON CITY,,,',
+            'BSIT 4-B Class List,,,',
+            'JULY 9.2026,JULY 16.2026,46235,August 15.2026',
+            ',,,',
+            'No.,Student No.,Name of Student,Email',     // row 5: the heading row
+            "1,2023-10001,Ana Cruz,ana@{$d}",
+            '2,2023-10002,Ben Lim,',
+            ',,,',
+            "3,,Cara Uy,cara@{$d}",                     // row 9: no ID number
+        ]);
+
+        $this->actingAs($this->admin ??= $this->admin())->post('/admin/users/import', ['type' => 'student', 'course' => 'BSIT', 'year_level' => 4, 'section' => 'B', 'file' => $file])
+            ->assertSessionHas('status', '2 imported, 1 skipped.');
+        $this->assertSame('BSIT · 4th Year · Section B', User::where('id_number', '2023-10001')->sole()->academicLabel());
+        $this->assertSame('Ben Lim', User::where('id_number', '2023-10002')->value('name'));
+
+        // Row numbers still match the spreadsheet.
+        $result = $this->actingAs($this->admin)->get('/admin/users/import')->viewData('result');
+        $this->assertSame([9], array_column($result['skipped'], 'row'));
+        $this->assertSame([7], array_column($result['email_alerts'], 'row'));
+    }
+
+    public function test_import_explains_when_no_heading_row_is_found(): void
+    {
+        // Like an attendance sheet: dates and numbers, no ID Number or Name headings.
+        $this->import('student', $this->csv(['JULY 9.2026,JULY 16.2026,46235', '46242,46256,46263']))
+            ->assertSessionHasErrors(['file' => 'Missing required columns: "ID Number", "Name". '
+                .'Found in your file: "JULY 9.2026", "JULY 16.2026", "46235". '
+                .'Expected for a Student import: ID Number*, Name*, Email (* = required). No heading row was found in the first 20 rows.']);
+
+        // The closest row is reported, with its row number.
+        $this->import('student', $this->csv(['Class list,', 'Student ID,Remarks', '1,x']))
+            ->assertSessionHasErrors(['file' => 'Missing required column: "Name". Found in your file (row 2): "Student ID", "Remarks". '
+                .'Expected for a Student import: ID Number*, Name*, Email (* = required).']);
+    }
+
     public function test_import_rejects_bad_files_and_lists_found_and_expected_headings(): void
     {
         $this->import('student', $this->csv(['Student ID,Email,Remarks', 'A,,']))

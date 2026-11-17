@@ -193,25 +193,23 @@ class UserImportService
         return $result;
     }
 
+    /** How many rows from the top are searched for the heading row (FR-ADM-18). */
+    public const HEADING_SEARCH_ROWS = 20;
+
     /**
-     * Finds the heading row (the first non-empty row) and which column holds each field.
+     * Which column holds each field, for one candidate heading row.
      *
-     * @return array{0: int, 1: array<string, int>, 2: Collection<int, array>} heading line, field => column index, data rows
+     * @return array<string, int> field => column index
      */
-    private function readSheet(Collection $sheet, string $type, array $fixedFields = []): array
+    private function mapHeadings(array $headings, string $type): array
     {
-        $rows = $sheet->map(fn ($r) => array_values(collect($r)->all()))->values();
-        $headerIndex = $rows->search(fn ($cells) => collect($cells)->contains(fn ($c) => trim((string) $c) !== ''));
-
-        if ($headerIndex === false) {
-            throw ValidationException::withMessages(['file' => 'The file is empty. Download the '.self::TYPES[$type].' template and fill it in.']);
-        }
-
-        $headings = $rows[$headerIndex];
-        $lookup = [];
-        foreach (self::HEADING_ALIASES as $field => $aliases) {
-            foreach ($aliases as $alias) {
-                $lookup[self::normalizeHeading($alias)] = $field;
+        static $lookup = null;
+        if ($lookup === null) {
+            $lookup = [];
+            foreach (self::HEADING_ALIASES as $field => $aliases) {
+                foreach ($aliases as $alias) {
+                    $lookup[self::normalizeHeading($alias)] = $field;
+                }
             }
         }
 
@@ -223,14 +221,59 @@ class UserImportService
             }
         }
 
+        return $map;
+    }
+
+    /**
+     * FR-ADM-18: finds the heading row automatically. Titles, dates or school names above it are
+     * skipped: of the first rows, the one with the most required headings (then the most known
+     * headings) wins; ties go to the higher row.
+     *
+     * @return array{0: int, 1: array<string, int>, 2: Collection<int, array>} heading line, field => column index, data rows
+     */
+    private function readSheet(Collection $sheet, string $type, array $fixedFields = []): array
+    {
+        $rows = $sheet->map(fn ($r) => array_values(collect($r)->all()))->values();
+        $filled = fn ($cells) => collect($cells)->contains(fn ($c) => trim((string) $c) !== '');
+
+        if ($rows->search($filled) === false) {
+            throw ValidationException::withMessages(['file' => 'The file is empty. Download the '.self::TYPES[$type].' template and fill it in.']);
+        }
+
         // A column whose value was chosen on the page (FR-ADM-16) isn't needed in the file.
-        $missing = collect(self::COLUMNS[$type])->filter(fn ($c, $field) => $c[1] && ! isset($map[$field]) && ! in_array($field, $fixedFields, true))->map(fn ($c) => $c[0]);
+        $required = collect(self::COLUMNS[$type])->filter(fn ($c, $field) => $c[1] && ! in_array($field, $fixedFields, true));
+
+        $best = null;
+        foreach ($rows->take(self::HEADING_SEARCH_ROWS) as $index => $cells) {
+            if (! $filled($cells)) {
+                continue;
+            }
+            $map = $this->mapHeadings($cells, $type);
+            $score = [$required->keys()->filter(fn ($f) => isset($map[$f]))->count(), count($map)];
+            if ($best === null || $score > $best['score']) {
+                $best = ['index' => $index, 'map' => $map, 'score' => $score];
+            }
+            if ($score[0] === $required->count() && $required->isNotEmpty()) {
+                break; // every required heading found: this is the heading row
+            }
+        }
+
+        // Nothing recognizable at all: report the first non-empty row.
+        if ($best['score'] === [0, 0]) {
+            $best['index'] = $rows->search($filled);
+        }
+        $headerIndex = $best['index'];
+        $map = $best['map'];
+
+        $missing = $required->filter(fn ($c, $field) => ! isset($map[$field]))->map(fn ($c) => $c[0]);
         if ($missing->isNotEmpty()) {
-            $found = collect($headings)->map(fn ($h) => trim((string) $h))->filter(fn ($h) => $h !== '');
+            $found = collect($rows[$headerIndex])->map(fn ($h) => trim((string) $h))->filter(fn ($h) => $h !== '');
             throw ValidationException::withMessages(['file' => 'Missing required '.str('column')->plural($missing->count()).': '
                 .$missing->map(fn ($m) => '"'.$m.'"')->implode(', ').'. '
-                .'Found in your file: '.($found->isEmpty() ? 'no headings' : $found->map(fn ($h) => '"'.$h.'"')->implode(', ')).'. '
-                .'Expected for a '.self::TYPES[$type].' import: '.implode(', ', self::headings($type, true)).' (* = required).']);
+                .'Found in your file'.($headerIndex > 0 ? ' (row '.($headerIndex + 1).')' : '').': '
+                .($found->isEmpty() ? 'no headings' : $found->map(fn ($h) => '"'.$h.'"')->implode(', ')).'. '
+                .'Expected for a '.self::TYPES[$type].' import: '.implode(', ', self::headings($type, true)).' (* = required).'
+                .($best['score'][1] === 0 ? ' No heading row was found in the first '.self::HEADING_SEARCH_ROWS.' rows.' : '')]);
         }
 
         $data = $rows->slice($headerIndex + 1)->values();

@@ -150,7 +150,7 @@
                 </div>
             @endforeach
 
-            <p class="help mt-3">Headings are matched loosely (case, spaces, dots and underscores don't matter; e.g. “ID No.” or “Student ID” work for ID Number). Rows with a problem, or whose ID number or email already exists (or repeats in the file), are skipped and listed with the reason. The rest are imported.</p>
+            <p class="help mt-3">The heading row is found automatically, so titles or dates above it are fine. Headings are matched loosely (case, spaces, dots and underscores don't matter; e.g. “ID No.” or “Student ID” work for ID Number). Rows with a problem, or whose ID number or email already exists (or repeats in the file), are skipped and listed with the reason. The rest are imported.</p>
         </section>
     </div>
 
