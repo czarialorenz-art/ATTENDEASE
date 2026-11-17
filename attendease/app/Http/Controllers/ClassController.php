@@ -73,7 +73,8 @@ class ClassController extends Controller
         $this->authorize('update', $class);
 
         $rows = collect($request->input('schedules', []))
-            ->filter(fn ($r) => filled($r['day_of_week'] ?? null) || filled($r['start_time'] ?? null) || filled($r['end_time'] ?? null) || filled($r['room'] ?? null))
+            ->filter(fn ($r) => filled($r['day_of_week'] ?? null) || filled($r['start_time'] ?? null) || filled($r['end_time'] ?? null))
+            ->map(fn ($r) => array_intersect_key($r, array_flip(['day_of_week', 'start_time', 'end_time'])))
             ->values()
             ->all();
         $request->merge(['schedules' => $rows]);
@@ -83,10 +84,10 @@ class ClassController extends Controller
             'schedules.*.day_of_week' => ['required', 'integer', 'between:0,6'],
             'schedules.*.start_time' => ['required', 'date_format:H:i'],
             'schedules.*.end_time' => ['required', 'date_format:H:i', 'after:schedules.*.start_time'],
-            'schedules.*.room' => ['nullable', 'string', 'max:100'],
-            'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
-            'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
-            'radius_m' => ['nullable', 'integer', 'min:10', 'max:5000'],
+            // Classroom location: building, floor and room name.
+            'building' => ['nullable', 'string', 'max:100'],
+            'floor' => ['nullable', 'string', 'max:50'],
+            'room' => ['nullable', 'string', 'max:100'],
         ], [
             'schedules.*.end_time.after' => 'Each end time must be after its start time.',
         ]);
@@ -94,12 +95,16 @@ class ClassController extends Controller
         DB::transaction(function () use ($class, $data) {
             $class->schedules()->delete();
             foreach ($data['schedules'] ?? [] as $row) {
-                $class->schedules()->create($row);
+                $class->schedules()->create($row); // rooms now live on the class, not on each row
             }
             $class->update([
-                'latitude' => $data['latitude'] ?? null,
-                'longitude' => $data['longitude'] ?? null,
-                'radius_m' => $data['radius_m'] ?? 100,
+                'building' => filled($data['building'] ?? null) ? trim($data['building']) : null,
+                'floor' => filled($data['floor'] ?? null) ? trim($data['floor']) : null,
+                'room' => filled($data['room'] ?? null) ? trim($data['room']) : null,
+                // Map coordinates were removed from the form, so the distance (TOO_FAR) check is off.
+                'latitude' => null,
+                'longitude' => null,
+                'radius_m' => 100,
             ]);
         });
 

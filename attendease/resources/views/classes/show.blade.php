@@ -35,12 +35,13 @@
 
             <h2 class="h2 mt-6 mb-2">Weekly schedule</h2>
             @forelse ($class->schedules as $row)
-                <div class="text-sm">{{ $row->dayName() }} · {{ substr($row->start_time, 0, 5) }}–{{ substr($row->end_time, 0, 5) }} @if ($row->room) · {{ $row->room }} @endif</div>
+                <div class="text-sm">{{ $row->dayName() }} · {{ substr($row->start_time, 0, 5) }}–{{ substr($row->end_time, 0, 5) }}</div>
             @empty
                 <p class="text-sm text-slate-500">No schedule set. <a href="{{ route('classes.edit', $class) }}" class="text-brand-600 hover:underline">Add one</a>.</p>
             @endforelse
             <p class="mt-2 text-sm text-slate-500">
-                Location check: {{ $class->hasLocation() ? 'on, '.$class->radius_m.' m radius' : 'off (no classroom location set)' }}
+                Classroom: {{ $class->locationLabel() ?? 'not set' }}
+                @unless ($class->locationLabel())<a href="{{ route('classes.edit', $class) }}" class="text-brand-600 hover:underline">Add it</a>@endunless
             </p>
         </div>
     </div>

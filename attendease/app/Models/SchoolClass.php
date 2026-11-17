@@ -25,7 +25,16 @@ class SchoolClass extends Model
     protected $fillable = [
         'teacher_id', 'subject', 'year_level', 'section', 'school_term', 'semester',
         'semester_start', 'semester_end', 'code', 'latitude', 'longitude', 'radius_m',
+        'building', 'floor', 'room',
     ];
+
+    /** FR-CLS-03: e.g. "Tesda Lab · 3rd floor · Main Building", or null when nothing is set. */
+    public function locationLabel(): ?string
+    {
+        $parts = array_filter([$this->room, $this->floor ? (preg_match('/floor/i', $this->floor) ? $this->floor : $this->floor.' floor') : null, $this->building], 'filled');
+
+        return $parts ? implode(' · ', $parts) : null;
+    }
 
     protected function casts(): array
     {

@@ -68,19 +68,36 @@ class ClassEnrollmentTest extends TestCase
         $this->actingAs($class->teacher)->put("/classes/{$class->id}", $this->classData(['section' => 'B']))->assertSessionHasNoErrors();
         $this->assertSame('B', $class->fresh()->section);
 
+        $class->update(['latitude' => 14.65, 'longitude' => 121.04]); // from before the map fields were removed
+
         $this->actingAs($class->teacher)->put("/classes/{$class->id}/schedule", [
             'schedules' => [
-                ['day_of_week' => 1, 'start_time' => '08:00', 'end_time' => '09:30', 'room' => 'R201'],
-                ['day_of_week' => 3, 'start_time' => '13:00', 'end_time' => '14:30', 'room' => ''],
-                ['day_of_week' => '', 'start_time' => '', 'end_time' => '', 'room' => ''], // blank row ignored
+                ['day_of_week' => 1, 'start_time' => '08:00', 'end_time' => '09:30'],
+                ['day_of_week' => 3, 'start_time' => '13:00', 'end_time' => '14:30', 'room' => 'ignored'], // rows no longer take a room
+                ['day_of_week' => '', 'start_time' => '', 'end_time' => ''], // blank row ignored
             ],
-            'latitude' => '14.6507', 'longitude' => '121.0494', 'radius_m' => '',
+            'building' => ' Main Building ', 'floor' => '3rd', 'room' => 'Tesda Lab',
+            'latitude' => '1', 'longitude' => '2', 'radius_m' => '50', // no longer accepted
         ])->assertSessionHasNoErrors();
 
         $class->refresh();
         $this->assertCount(2, $class->schedules);
-        $this->assertEqualsWithDelta(14.6507, $class->latitude, 0.00001);
-        $this->assertSame(100, $class->radius_m); // default
+        $this->assertNull($class->schedules->first()->room);
+        $this->assertSame(['Main Building', '3rd', 'Tesda Lab'], [$class->building, $class->floor, $class->room]);
+        $this->assertSame('Tesda Lab · 3rd floor · Main Building', $class->locationLabel());
+        $this->assertNull($class->latitude); // the distance check is off now
+        $this->assertFalse($class->hasLocation());
+
+        // The form has Building / Floor / Room and no map fields or per-row room.
+        $this->actingAs($class->teacher)->get("/classes/{$class->id}/edit")->assertOk()
+            ->assertSee('name="building"', false)->assertSee('name="floor"', false)->assertSee('name="room"', false)
+            ->assertDontSee('name="latitude"', false)->assertDontSee('Radius (m)')->assertDontSee('Use my current location')
+            ->assertDontSee('[room]', false);
+
+        // Shown on the class pages.
+        $this->actingAs($class->teacher)->get("/classes/{$class->id}")->assertSee('Classroom: Tesda Lab · 3rd floor · Main Building');
+        $student = $this->enroll($class);
+        $this->actingAs($student)->get("/classes/{$class->id}")->assertSee('Tesda Lab · 3rd floor · Main Building');
 
         $this->actingAs($class->teacher)->put("/classes/{$class->id}/schedule", [
             'schedules' => [['day_of_week' => 1, 'start_time' => '10:00', 'end_time' => '09:00']],

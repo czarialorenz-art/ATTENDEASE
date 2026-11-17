@@ -16,14 +16,14 @@
             @php
                 $rows = old('schedules', $class->schedules->map(fn ($s) => [
                     'day_of_week' => $s->day_of_week, 'start_time' => substr($s->start_time, 0, 5),
-                    'end_time' => substr($s->end_time, 0, 5), 'room' => $s->room,
+                    'end_time' => substr($s->end_time, 0, 5),
                 ])->all());
-                $rows[] = ['day_of_week' => '', 'start_time' => '', 'end_time' => '', 'room' => ''];
+                $rows[] = ['day_of_week' => '', 'start_time' => '', 'end_time' => ''];
             @endphp
 
             <div id="schedule-rows" class="space-y-3">
                 @foreach ($rows as $i => $row)
-                    <div class="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 p-3 sm:grid-cols-[1.2fr_1fr_1fr_1fr]" data-row>
+                    <div class="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 p-3 sm:grid-cols-[1.3fr_1fr_1fr]" data-row>
                         <select name="schedules[{{ $i }}][day_of_week]" class="input col-span-2 sm:col-span-1" aria-label="Day">
                             <option value="">Day…</option>
                             @foreach (\App\Models\ClassSchedule::DAYS as $d => $name)
@@ -32,8 +32,7 @@
                         </select>
                         <input type="time" name="schedules[{{ $i }}][start_time]" value="{{ $row['start_time'] ?? '' }}" class="input" aria-label="Start time">
                         <input type="time" name="schedules[{{ $i }}][end_time]" value="{{ $row['end_time'] ?? '' }}" class="input" aria-label="End time">
-                        <input name="schedules[{{ $i }}][room]" value="{{ $row['room'] ?? '' }}" class="input col-span-2 sm:col-span-1" placeholder="Room" aria-label="Room">
-                        @foreach (['day_of_week', 'start_time', 'end_time', 'room'] as $f)
+                        @foreach (['day_of_week', 'start_time', 'end_time'] as $f)
                             @error("schedules.$i.$f")<p class="error col-span-full">{{ $message }}</p>@enderror
                         @endforeach
                     </div>
@@ -42,15 +41,14 @@
             <button type="button" class="btn-secondary btn-sm" id="add-row">+ Add a row</button>
             <p class="help">Leave a row blank to remove it.</p>
 
+            {{-- FR-CLS-03: where the class meets --}}
             <h2 class="h2 pt-2">Classroom location</h2>
-            <p class="text-sm text-slate-500">Used to flag scans from too far away. Leave blank to turn the check off.</p>
+            <p class="text-sm text-slate-500">Shown to your students on their class page. All optional.</p>
             <div class="grid gap-3 sm:grid-cols-3">
-                <x-field name="latitude" label="Latitude" :value="$class->latitude" inputmode="decimal" placeholder="14.6507" />
-                <x-field name="longitude" label="Longitude" :value="$class->longitude" inputmode="decimal" placeholder="121.0494" />
-                <x-field name="radius_m" label="Radius (m)" type="number" :value="$class->radius_m ?? 100" min="10" max="5000" />
+                <x-field name="building" label="Building" :value="$class->building" maxlength="100" placeholder="e.g. Main Building" />
+                <x-field name="floor" label="Floor" :value="$class->floor" maxlength="50" placeholder="e.g. 3rd" />
+                <x-field name="room" label="Room" :value="$class->room" maxlength="100" placeholder="e.g. Tesda Lab" />
             </div>
-            <button type="button" class="btn-secondary btn-sm" id="use-location">Use my current location</button>
-            <p id="loc-msg" class="help"></p>
 
             <div class="flex justify-end"><button class="btn-primary">Save schedule & location</button></div>
         </form>
@@ -66,16 +64,6 @@
             clone.querySelectorAll('[name]').forEach(el => { el.name = el.name.replace(/schedules\[\d+]/, `schedules[${n}]`); el.value = ''; });
             clone.querySelectorAll('.error').forEach(el => el.remove());
             wrap.appendChild(clone);
-        });
-        document.getElementById('use-location').addEventListener('click', () => {
-            const msg = document.getElementById('loc-msg');
-            if (!navigator.geolocation) { msg.textContent = 'This browser has no location support.'; return; }
-            msg.textContent = 'Getting your location…';
-            navigator.geolocation.getCurrentPosition(p => {
-                document.getElementById('f_latitude').value = p.coords.latitude.toFixed(7);
-                document.getElementById('f_longitude').value = p.coords.longitude.toFixed(7);
-                msg.textContent = `Accuracy about ${Math.round(p.coords.accuracy)} m. Save to keep it.`;
-            }, e => { msg.textContent = 'Could not get location: ' + e.message; }, { enableHighAccuracy: true, timeout: 10000 });
         });
     </script>
     @endpush

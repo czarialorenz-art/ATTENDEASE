@@ -4,7 +4,13 @@
         <p class="text-sm text-slate-500">{{ $class->teacher->name }} · {{ $class->year_level }} · {{ $class->school_term }} · {{ $class->semester }} sem</p>
         @if ($class->schedules->isNotEmpty())
             <p class="mt-1 text-sm text-slate-500">
-                @foreach ($class->schedules as $row){{ $row->dayName() }} {{ substr($row->start_time, 0, 5) }}–{{ substr($row->end_time, 0, 5) }}@if ($row->room) ({{ $row->room }})@endif{{ $loop->last ? '' : ' · ' }}@endforeach
+                @foreach ($class->schedules as $row){{ $row->dayName() }} {{ substr($row->start_time, 0, 5) }}–{{ substr($row->end_time, 0, 5) }}{{ $loop->last ? '' : ' · ' }}@endforeach
+            </p>
+        @endif
+        @if ($class->locationLabel())
+            <p class="mt-1 flex items-center gap-1 text-sm text-slate-500">
+                <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-6.2-7-11a7 7 0 1114 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                {{ $class->locationLabel() }}
             </p>
         @endif
     </div>

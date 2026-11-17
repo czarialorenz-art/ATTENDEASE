@@ -98,12 +98,12 @@ A teacher creates a class and shares its code. Students ask to join with that co
 
 - **FR-CLS-01** Teachers create a class with: subject, year level, section, school term (e.g. "2026-2027"), semester (1st, 2nd or Summer), semester start date and semester end date. The end date must be after the start date.
 - **FR-CLS-02** Each class gets a unique 7-character code of uppercase letters and digits, leaving out the look-alikes 0/O and 1/I. The code is shown on the class page with a Copy button.
-- **FR-CLS-03** A teacher can edit a class's details and set its weekly schedule: one or more rows of day of week, start time, end time and room. The teacher can also set the classroom location (latitude, longitude, radius in metres, default 100 m) for the distance check in FR-ATT-10, typing it in or using "Use my current location".
+- **FR-CLS-03** A teacher can edit a class's details and set its weekly schedule: one or more rows of day of week, start time and end time. The **classroom location** is the class's **building, floor and room** (all optional), shown to the teacher on the class overview ("Classroom: Tesda Lab · 3rd floor · Main Building") and to students on their class page. (Map coordinates and a radius were removed from the form, so the TOO_FAR distance check in FR-ATT-10 is off.)
 - **FR-CLS-04** A student enters a class code and creates an enrollment with status `pending`. A wrong code gives a clear error. A duplicate request, a request for a class the student is already in, or a request to join one's own class is rejected.
 - **FR-CLS-05** The teacher sees pending requests and approves or rejects each one. Approving sets `approved`; rejecting sets `rejected`, and the student may ask again later.
 - **FR-CLS-06** A teacher can remove an approved student, which sets `removed`. The student loses access to the class, but their past attendance is kept for reports.
 - **FR-CLS-07** Each step notifies the other side (FR-NOTIF-02): a new request notifies the teacher; an approval, rejection or removal notifies the student.
-- **FR-CLS-08** Every user has one dashboard with: "Classes I teach" (with pending-request counts), then "Today's sessions" for those classes, "Classes I'm in" (approved classes plus pending requests), a box to join a class by code, and a "Scan attendance QR" shortcut for students. "Today's sessions" lists only today's unfinished sessions, ongoing ones (a stage open) first; a session drops off once Time Out closes. The card refreshes itself every 15 seconds, so new or newly opened sessions appear without reloading. Students get the same live "Today's sessions" card for the classes they're approved in, showing each session's stage, their own status (e.g. Present, Time In 8:00 AM), and a "Scan Time In" / "Scan Time Out" button while that stage is open and they haven't scanned it yet.
+- **FR-CLS-08** Every user has one dashboard with: "Classes I teach" (with pending-request counts), then "Today's sessions" for those classes, "Classes I'm in" (approved classes plus pending requests), a box to join a class by code, and a "Scan attendance QR" shortcut for students. "Today's sessions" lists only today's unfinished sessions, ongoing ones (a stage open) first; a session drops off once Time Out closes. The card refreshes itself every 15 seconds, so new or newly opened sessions appear without reloading. Students get the same live "Today's sessions" card for the classes they're approved in, showing each session's stage, their own status (e.g. Present, Time In 8:00 AM), and a "Scan Time In" / "Scan Time Out" button while that stage is open and they haven't scanned it yet. A teacher-only account (teaches classes, no approved or pending enrollments) doesn't see "Classes I'm in", the student cards or the top-bar Scan QR button; its two teacher cards use the full width.
 - **FR-CLS-09** *(new)* The Students page shows each student's own section (from their profile) next to their name, on join requests, the enrolled list and the removed list. Students with no section set show "No section".
 - **FR-CLS-10** *(new)* The Students page has a search box (student name, number or email, any case) and a Section filter listing the sections that occur among the class's students, plus "No section". Both apply to join requests, enrolled and removed students; counts show "x of y" while filtering, and Clear resets them.
 
@@ -155,7 +155,7 @@ A teacher opens a dated session, runs a Time In stage and then a Time Out stage,
 | Flag code | Rule |
 | --- | --- |
 | `NO_LOCATION` | Location was denied, unavailable or timed out |
-| `TOO_FAR` | Distance from the class location is greater than its radius (default 100 m); skipped if the class has no location set |
+| `TOO_FAR` | Distance from the class's map location is greater than its radius; skipped when the class has no map coordinates, which is now always (the coordinates were removed from the form, FR-CLS-03) |
 | `SHARED_DEVICE` | The same device ID has already scanned for a different student in the same session |
 | `IP_BURST` | 3 or more scans from the same IP in the same session within 3 seconds; every scan in that burst is flagged |
 
@@ -230,8 +230,8 @@ All tables have `id` and timestamps. Foreign keys use `constrained()`.
 | `user_devices` | user_id, token_hash, user_agent, ip, last_seen_at |
 | `password_reset_tokens` | email, token (hashed), created_at; expires after 15 minutes, single use |
 | `sessions` | Laravel database session driver |
-| `classes` | teacher_id, subject, year_level, section, school_term, semester, semester_start, semester_end, code (unique), latitude, longitude, radius_m |
-| `class_schedules` | class_id, day_of_week, start_time, end_time, room |
+| `classes` | teacher_id, subject, year_level, section, school_term, semester, semester_start, semester_end, code (unique), building, floor, room; latitude, longitude, radius_m (no longer set) |
+| `class_schedules` | class_id, day_of_week, start_time, end_time (room no longer used) |
 | `enrollments` | class_id, student_id, status (pending / approved / rejected / removed), decided_at; unique(class_id, student_id) |
 | `attendance_sessions` | class_id, date, title, grace_minutes (default 15), time_in_opened_at, time_in_closed_at, time_out_opened_at, time_out_closed_at, archived_at (soft delete; FR-ATT-16) |
 | `attendance_records` | attendance_session_id, student_id, status (present / late / absent), time_in_at, time_out_at, source (qr / manual); unique(session, student) |

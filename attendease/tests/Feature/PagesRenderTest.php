@@ -22,7 +22,8 @@ class PagesRenderTest extends TestCase
     public function test_teacher_and_student_pages_render(): void
     {
         $class = $this->makeClass();
-        ClassSchedule::factory()->create(['class_id' => $class->id, 'room' => 'R-301']);
+        ClassSchedule::factory()->create(['class_id' => $class->id, 'start_time' => '07:45']);
+        $class->update(['room' => 'R-301', 'building' => 'Main Building']);
         $student = $this->enroll($class);
         $session = AttendanceSession::factory()->for($class, 'schoolClass')->create(['title' => 'Week 9']);
 
