@@ -10,7 +10,7 @@
 </head>
 <body class="min-h-screen bg-slate-50 font-sans text-slate-900 antialiased">
     <header class="sticky top-0 z-30 border-b border-brand-800 bg-brand-600 text-white">
-        <div class="mx-auto flex max-w-screen-2xl items-center gap-3 px-4 py-2.5 sm:px-6 lg:px-8">
+        <div class="mx-auto flex items-center gap-3 px-4 py-2.5 sm:px-6 lg:px-8">
             <a href="{{ route('dashboard') }}" class="flex min-w-0 items-center gap-2">
                 <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gold-400 text-sm font-black text-brand-800">MQ</span>
                 <span class="min-w-0 leading-tight">
@@ -68,7 +68,7 @@
         </div>
     </header>
 
-    <main class="mx-auto max-w-screen-2xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
+    <main class="mx-auto px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
         @if (session('status'))
             <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">{{ session('status') }}</div>
         @endif
