@@ -223,6 +223,8 @@ Three modules for Admin accounts: Dashboard, User Management and Activity Log.
 
 - **FR-ADM-19** *(new)* A teacher's **Department** is a dropdown from the fixed list in `config/students.php` (BSIT for now) on the admin Add/Edit form and the teacher's Profile. The teacher import checks the Department column against the same list (typed variants such as "Information Technology" are understood; anything else skips the row with the reason). A department typed before the list existed is shown as "(old value, not in the list)" and can be kept, but not given to other accounts.
 
+- **FR-ADM-20** *(new)* User Management has a checkbox on each row and one in the header to select the whole page. Ticking users shows a bar with the count and one action for all of them: **Set course / year level / section** (Students only; each field can stay "Keep as is"), **Change role**, **Deactivate** or **Activate**, applied after a confirmation. Users an action doesn't apply to are skipped and named in the result, e.g. "Change role: 2 users updated, 1 skipped — Ada Admin (your own account)": your own account for role changes and deactivation, non-students for course/year/section, and users already in that state. Each change is checked and logged like a single edit, marked "(bulk edit)" in the Activity Log.
+
 ### Activity Log
 
 - **FR-LOG-01** *(new)* Changes are recorded with spatie/laravel-activitylog (`activity_log` table): who did it, their role at the time, the action and the details.

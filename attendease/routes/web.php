@@ -130,6 +130,7 @@ Route::middleware(['auth', 'auth.session', 'role:admin'])->prefix('admin')->name
     Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
     Route::get('/users/create', [AdminUserController::class, 'create'])->name('users.create');
     Route::post('/users', [AdminUserController::class, 'store'])->name('users.store');
+    Route::post('/users/bulk', [AdminUserController::class, 'bulk'])->name('users.bulk'); // FR-ADM-20
     Route::get('/users/import', [UserImportController::class, 'create'])->name('users.import');
     Route::post('/users/import', [UserImportController::class, 'store'])->name('users.import.store');
     Route::get('/users/import/template/{type}.{format}', [UserImportController::class, 'template'])

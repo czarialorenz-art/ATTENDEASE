@@ -75,15 +75,79 @@
             @endforeach
         </nav>
 
+        {{-- FR-ADM-20: bulk edit for the ticked users (the checkboxes below belong to this form) --}}
+        @php($bulkErrors = $errors->getBag('bulk'))
+        <form method="POST" action="{{ route('admin.users.bulk') }}" id="bulk-form" data-bulk-bar
+              @class(['mb-4 flex flex-col gap-3 rounded-lg border border-brand-100 bg-brand-50 p-3 lg:flex-row lg:flex-wrap lg:items-end', 'hidden' => ! $bulkErrors->any()])>
+            @csrf
+            <div class="self-center text-sm font-semibold text-brand-700 lg:mr-2"><span data-bulk-count>0</span> selected</div>
+            <div class="lg:w-64">
+                <label for="bulk-action" class="label">Action</label>
+                <select id="bulk-action" name="action" class="input" data-bulk-action required>
+                    <option value="">Choose an action…</option>
+                    @foreach (UserController::BULK_ACTIONS as $key => $label)
+                        <option value="{{ $key }}" @selected(old('action') === $key)>{{ $label }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div data-bulk-for="role" class="hidden lg:w-44">
+                <label for="bulk-role" class="label">New role</label>
+                <select id="bulk-role" name="role" class="input">
+                    <option value="">Choose…</option>
+                    @foreach (User::ROLES as $key => $label)
+                        <option value="{{ $key }}" @selected(old('role') === $key)>{{ $label }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div data-bulk-for="student_info" class="hidden grid-cols-3 gap-2 lg:w-[30rem]">
+                <div>
+                    <label for="bulk-course" class="label">Course</label>
+                    <select id="bulk-course" name="course" class="input">
+                        <option value="">Keep as is</option>
+                        @foreach (StudentInfo::courses() as $code => $name)
+                            <option value="{{ $code }}" title="{{ $name }}" @selected(old('course') === $code)>{{ $code }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label for="bulk-year" class="label">Year level</label>
+                    <select id="bulk-year" name="year_level" class="input">
+                        <option value="">Keep as is</option>
+                        @foreach (StudentInfo::yearLevels() as $level)
+                            <option value="{{ $level }}" @selected((string) old('year_level') === (string) $level)>{{ StudentInfo::yearLabel($level) }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label for="bulk-section" class="label">Section</label>
+                    <select id="bulk-section" name="section" class="input">
+                        <option value="">Keep as is</option>
+                        @foreach (StudentInfo::sections() as $letter)
+                            <option value="{{ $letter }}" @selected(old('section') === $letter)>Section {{ $letter }}</option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button class="btn-primary" data-bulk-apply>Apply</button>
+                <button type="button" class="btn-secondary" data-bulk-clear>Clear selection</button>
+            </div>
+            @if ($bulkErrors->any())
+                <p class="error w-full">{{ $bulkErrors->first() }}</p>
+            @endif
+        </form>
+
         <div class="table-wrap">
             <table class="table">
                 <thead>
-                    <tr><th>Name</th><th>ID number</th><th>Email</th><th>Role</th><th>Status</th><th class="text-right">Actions</th></tr>
+                    <tr><th class="w-8"><input type="checkbox" class="h-4 w-4 rounded border-slate-300" data-bulk-all aria-label="Select all users on this page"></th><th>Name</th><th>ID number</th><th>Email</th><th>Role</th><th>Status</th><th class="text-right">Actions</th></tr>
                 </thead>
                 <tbody>
                     @forelse ($users as $u)
                         @php($self = auth()->user()->is($u))
                         <tr @class(['bg-slate-50/60 text-slate-500' => ! $u->isActive()])>
+                            <td class="w-8"><input type="checkbox" name="ids[]" value="{{ $u->id }}" form="bulk-form" class="h-4 w-4 rounded border-slate-300" data-bulk-item
+                                aria-label="Select {{ $u->name }}" @checked(in_array((string) $u->id, array_map('strval', (array) old('ids', [])), true))></td>
                             <td class="whitespace-nowrap">
                                 <div class="font-medium">{{ $u->name }} @if ($self)<span class="badge-neutral">you</span>@endif</div>
                                 {{-- FR-ADM-10: "BSIT · 4th Year · Section B" --}}
@@ -133,11 +197,56 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="6" class="py-8 text-center text-slate-500">{{ $filtering || $tab !== 'all' ? 'No users match.' : 'No users yet.' }}</td></tr>
+                        <tr><td colspan="7" class="py-8 text-center text-slate-500">{{ $filtering || $tab !== 'all' ? 'No users match.' : 'No users yet.' }}</td></tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
         <div class="mt-4">{{ $users->links() }}</div>
     </div>
+    @push('scripts')
+    <script>
+        // FR-ADM-20: show the bulk bar while users are ticked; show the fields the chosen action needs.
+        (() => {
+            const bar = document.querySelector('[data-bulk-bar]');
+            if (!bar) return;
+            const items = [...document.querySelectorAll('[data-bulk-item]')];
+            const all = document.querySelector('[data-bulk-all]');
+            const action = bar.querySelector('[data-bulk-action]');
+
+            const refresh = () => {
+                const n = items.filter(i => i.checked).length;
+                bar.querySelector('[data-bulk-count]').textContent = n;
+                bar.classList.toggle('hidden', n === 0 && !bar.querySelector('.error'));
+                if (all) {
+                    all.checked = n > 0 && n === items.length;
+                    all.indeterminate = n > 0 && n < items.length;
+                }
+            };
+            const showFields = () => {
+                bar.querySelectorAll('[data-bulk-for]').forEach(el => {
+                    const on = el.dataset.bulkFor === action.value;
+                    el.classList.toggle('hidden', !on);
+                    el.classList.toggle('grid', on && el.dataset.bulkFor === 'student_info');
+                });
+            };
+
+            items.forEach(i => i.addEventListener('change', refresh));
+            all?.addEventListener('change', () => { items.forEach(i => (i.checked = all.checked)); refresh(); });
+            action.addEventListener('change', showFields);
+            bar.querySelector('[data-bulk-clear]').addEventListener('click', () => {
+                items.forEach(i => (i.checked = false));
+                bar.querySelector('.error')?.remove();
+                refresh();
+            });
+            bar.addEventListener('submit', (e) => {
+                const n = items.filter(i => i.checked).length;
+                const label = action.options[action.selectedIndex]?.text || '';
+                if (n && action.value && !confirm(`${label} for ${n} selected ${n === 1 ? 'user' : 'users'}?`)) e.preventDefault();
+            });
+            showFields();
+            refresh();
+        })();
+    </script>
+    @endpush
 </x-layouts.admin>

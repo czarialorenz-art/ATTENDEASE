@@ -289,6 +289,77 @@ class AdminTest extends TestCase
         $this->actingAs($admin)->put('/admin/users/'.User::where('id_number', 'T-1')->value('id'), [...$base, 'department' => 'CCS'])->assertSessionHasErrors('department');
     }
 
+    /* ---------------- Bulk edit (FR-ADM-20) ---------------- */
+
+    public function test_users_page_has_checkboxes_and_a_bulk_bar(): void
+    {
+        $admin = $this->admin();
+        $u = User::factory()->create(['name' => 'Ana Cruz']);
+
+        $this->actingAs($admin)->get('/admin/users')->assertOk()
+            ->assertSee('data-bulk-all', false)
+            ->assertSee('name="ids[]" value="'.$u->id.'" form="bulk-form"', false)
+            ->assertSee('action="'.route('admin.users.bulk').'"', false)
+            ->assertSee('Set course / year level / section')->assertSee('Change role')->assertSee('Keep as is');
+    }
+
+    public function test_bulk_set_course_year_and_section_for_students_only(): void
+    {
+        $admin = $this->admin();
+        $a = $this->student('Ana Cruz', 3, 'A');
+        $b = User::factory()->create(['name' => 'Ben Lim', 'year' => '4TH', 'section' => 'Section 4-B']); // old typed values
+        $t = User::factory()->teacher()->create(['name' => 'Cara Uy']);
+
+        $this->actingAs($admin)->post('/admin/users/bulk', ['ids' => [$a->id, $b->id, $t->id], 'action' => 'student_info', 'year_level' => 4, 'section' => 'B'])
+            ->assertSessionHas('status', 'Set course / year level / section: 2 users updated, 1 skipped — Cara Uy (not a student).');
+
+        $this->assertSame(['BSIT', 4, 'B'], [$a->fresh()->course, $a->fresh()->year_level, $a->fresh()->section]); // course kept as is
+        $this->assertSame([4, 'B', null], [$b->fresh()->year_level, $b->fresh()->section, $b->fresh()->year]);
+        $this->assertNull($t->fresh()->section);
+
+        $log = Activity::where('event', Audit::USER_EDITED)->where('subject_id', $a->id)->sole();
+        $this->assertSame('Ana Cruz ('.$a->id_number.'): Year level: 3 → 4; Section: A → B (bulk edit)', $log->description);
+
+        // Nothing chosen, nothing ticked, or a value not in the lists.
+        $this->actingAs($admin)->post('/admin/users/bulk', ['ids' => [$a->id], 'action' => 'student_info'])->assertSessionHasErrorsIn('bulk', 'action');
+        $this->actingAs($admin)->post('/admin/users/bulk', ['action' => 'activate'])->assertSessionHasErrorsIn('bulk', 'ids');
+        $this->actingAs($admin)->post('/admin/users/bulk', ['ids' => [$a->id], 'action' => 'student_info', 'section' => 'Z'])->assertSessionHasErrorsIn('bulk', 'section');
+    }
+
+    public function test_bulk_change_role_deactivate_and_activate_skip_yourself(): void
+    {
+        $admin = $this->admin(['name' => 'Ada Admin']);
+        $a = $this->student('Ana Cruz', 4, 'B');
+        $b = User::factory()->create(['name' => 'Ben Lim']);
+
+        $this->actingAs($admin)->post('/admin/users/bulk', ['ids' => [$a->id, $b->id, $admin->id], 'action' => 'role', 'role' => 'teacher'])
+            ->assertSessionHas('status', 'Change role: 2 users updated, 1 skipped — Ada Admin (your own account).');
+        $this->assertSame([User::TEACHER, User::TEACHER, User::ADMIN], [$a->fresh()->role, $b->fresh()->role, $admin->fresh()->role]);
+        $this->assertNull($a->fresh()->course); // teachers don't keep student info
+        $this->assertSame(2, Activity::where('event', Audit::ROLE_CHANGED)->count());
+        $this->actingAs($admin)->post('/admin/users/bulk', ['ids' => [$a->id], 'action' => 'role'])->assertSessionHasErrorsIn('bulk', 'role');
+
+        $this->actingAs($admin)->post('/admin/users/bulk', ['ids' => [$a->id, $b->id, $admin->id], 'action' => 'deactivate'])
+            ->assertSessionHas('status', 'Deactivate: 2 users updated, 1 skipped — Ada Admin (your own account).');
+        $this->assertFalse($a->fresh()->isActive());
+        $this->assertTrue($admin->fresh()->isActive());
+
+        $this->actingAs($admin)->post('/admin/users/bulk', ['ids' => [$a->id, $b->id, $admin->id], 'action' => 'activate'])
+            ->assertSessionHas('status', 'Activate: 2 users updated, 1 skipped — Ada Admin (already active).');
+        $this->assertTrue($a->fresh()->isActive());
+        $this->assertSame(2, Activity::where('event', Audit::USER_DEACTIVATED)->count());
+        $this->assertStringEndsWith('(bulk edit)', Activity::where('event', Audit::USER_ACTIVATED)->first()->description);
+    }
+
+    public function test_only_admins_can_bulk_edit(): void
+    {
+        $u = User::factory()->create();
+        foreach ([User::factory()->create(), User::factory()->teacher()->create()] as $user) {
+            $this->actingAs($user)->post('/admin/users/bulk', ['ids' => [$u->id], 'action' => 'deactivate'])->assertForbidden();
+        }
+        $this->assertTrue($u->fresh()->isActive());
+    }
+
     public function test_admin_cannot_change_own_role_or_deactivate_self(): void
     {
         $admin = $this->admin(['name' => 'Ada Admin']);

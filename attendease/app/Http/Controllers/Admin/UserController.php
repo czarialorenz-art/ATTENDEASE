@@ -183,26 +183,7 @@ class UserController extends Controller
             $passwordChanged = $user->isDirty('password');
             $user->save();
 
-            $changes = collect(self::LOGGED_FIELDS)
-                ->filter(fn ($label, $field) => (string) ($old[$field] ?? '') !== (string) ($user->{$field} ?? ''))
-                ->map(fn ($label, $field) => $label.': '.($old[$field] ?? '—').' → '.($user->{$field} ?? '—'))
-                ->values();
-            if ($passwordChanged) {
-                $changes->push('password reset');
-            }
-
-            if ($changes->isNotEmpty()) {
-                Audit::log(Audit::USER_EDITED, Audit::who($user).': '.$changes->implode('; '), $user, [
-                    'old' => collect($old)->only(array_keys($user->getChanges()))->all(),
-                    'new' => collect($user->getChanges())->only(array_keys(self::LOGGED_FIELDS))->all(),
-                    'password_reset' => $passwordChanged,
-                ]);
-            }
-
-            if ($oldRole !== $user->role) {
-                Audit::log(Audit::ROLE_CHANGED, Audit::who($user).': '.(User::ROLES[$oldRole] ?? $oldRole).' → '.$user->roleLabel(), $user,
-                    ['old' => $oldRole, 'new' => $user->role]);
-            }
+            $this->logChanges($user, $old, $oldRole, $passwordChanged);
         });
 
         // A changed password or role ends the user's open sessions, so the change applies right away.
@@ -212,6 +193,127 @@ class UserController extends Controller
 
         return redirect()->route('admin.users.index')->with('status', $user->name.' was updated.');
     }
+
+    /**
+     * Activity Log entries for a saved user: "User edited" with each changed field (old → new)
+     * and "Role changed" when the role changed. Used by Edit and by bulk edits.
+     *
+     * @param  array<string, mixed>  $old  the LOGGED_FIELDS values before the change
+     */
+    private function logChanges(User $user, array $old, string $oldRole, bool $passwordChanged = false, string $via = ''): void
+    {
+        $changes = collect(self::LOGGED_FIELDS)
+            ->filter(fn ($label, $field) => (string) ($old[$field] ?? '') !== (string) ($user->{$field} ?? ''))
+            ->map(fn ($label, $field) => $label.': '.($old[$field] ?? '—').' → '.($user->{$field} ?? '—'))
+            ->values();
+        if ($passwordChanged) {
+            $changes->push('password reset');
+        }
+
+        if ($changes->isNotEmpty()) {
+            Audit::log(Audit::USER_EDITED, Audit::who($user).': '.$changes->implode('; ').$via, $user, [
+                'old' => collect($old)->only(array_keys($user->getChanges()))->all(),
+                'new' => collect($user->getChanges())->only(array_keys(self::LOGGED_FIELDS))->all(),
+                'password_reset' => $passwordChanged,
+            ]);
+        }
+
+        if ($oldRole !== $user->role) {
+            Audit::log(Audit::ROLE_CHANGED, Audit::who($user).': '.(User::ROLES[$oldRole] ?? $oldRole).' → '.$user->roleLabel().$via, $user,
+                ['old' => $oldRole, 'new' => $user->role]);
+        }
+    }
+
+    /**
+     * FR-ADM-20: one action for every ticked user. Users an action doesn't apply to (yourself,
+     * a non-student for course/year/section, someone already in that state) are skipped and counted.
+     */
+    public function bulk(Request $request)
+    {
+        $data = $request->validateWithBag('bulk', [
+            'ids' => ['required', 'array', 'max:500'],
+            'ids.*' => ['integer', 'distinct'],
+            'action' => ['required', Rule::in(array_keys(self::BULK_ACTIONS))],
+            'role' => ['required_if:action,role', 'nullable', Rule::in(array_keys(User::ROLES))],
+            ...$this->accounts->studentInfoRules(requiredForStudents: false),
+        ], [
+            'ids.required' => 'Tick at least one user first.',
+            'action.required' => 'Choose what to do with the selected users.',
+            'role.required_if' => 'Choose the new role.',
+        ], ['year_level' => 'year level']);
+
+        $info = collect($data)->only(['course', 'year_level', 'section'])->filter(fn ($v) => filled($v));
+        if ($data['action'] === 'student_info' && $info->isEmpty()) {
+            throw ValidationException::withMessages(['action' => 'Choose a course, year level or section to set.'])->errorBag('bulk');
+        }
+
+        $me = $request->user();
+        $users = User::whereIn('id', $data['ids'])->orderBy('name')->get();
+        $done = 0;
+        $skipped = [];
+        $via = ' (bulk edit)';
+
+        DB::transaction(function () use ($users, $data, $info, $me, $via, &$done, &$skipped) {
+            foreach ($users as $user) {
+                $self = $me->is($user);
+                $old = $user->only(array_keys(self::LOGGED_FIELDS));
+                $oldRole = $user->role;
+
+                $reason = match ($data['action']) {
+                    'student_info' => $user->isStudent() ? null : 'not a student',
+                    'role' => $self ? 'your own account' : ($user->role === $data['role'] ? 'already '.$user->roleLabel() : null),
+                    'deactivate' => $self ? 'your own account' : (! $user->isActive() ? 'already deactivated' : null),
+                    'activate' => $user->isActive() ? 'already active' : null,
+                };
+                if ($reason) {
+                    $skipped[] = $user->name.' ('.$reason.')';
+
+                    continue;
+                }
+
+                switch ($data['action']) {
+                    case 'student_info':
+                        $user->fill($info->map(fn ($v, $k) => $k === 'year_level' ? (int) $v : $v)->all());
+                        $user->year = null; // a value picked from the lists replaces old typed text
+                        $user->save();
+                        $this->logChanges($user, $old, $oldRole, via: $via);
+                        break;
+                    case 'role':
+                        $user->role = $data['role'];
+                        $this->keepStudentInfoForStudentsOnly($user);
+                        $user->save();
+                        $this->logChanges($user, $old, $oldRole, via: $via);
+                        $this->accounts->endSessions($user);
+                        break;
+                    case 'deactivate':
+                        $user->forceFill(['deactivated_at' => now()])->save();
+                        $this->accounts->endSessions($user);
+                        Audit::log(Audit::USER_DEACTIVATED, 'Deactivated '.$user->roleLabel().' '.Audit::who($user).$via, $user);
+                        break;
+                    case 'activate':
+                        $user->forceFill(['deactivated_at' => null])->save();
+                        Audit::log(Audit::USER_ACTIVATED, 'Activated '.$user->roleLabel().' '.Audit::who($user).$via, $user);
+                        break;
+                }
+                $done++;
+            }
+        });
+
+        $message = self::BULK_ACTIONS[$data['action']].': '.$done.' '.str('user')->plural($done).' updated';
+        if ($skipped) {
+            $message .= ', '.count($skipped).' skipped — '.implode(', ', array_slice($skipped, 0, 10)).(count($skipped) > 10 ? ', …' : '');
+        }
+
+        return back()->with('status', $message.'.');
+    }
+
+    /** FR-ADM-20: the bulk actions, in menu order. */
+    public const BULK_ACTIONS = [
+        'student_info' => 'Set course / year level / section',
+        'role' => 'Change role',
+        'deactivate' => 'Deactivate',
+        'activate' => 'Activate',
+    ];
 
     /**
      * FR-ADM-10: course, year level and section belong to students. Saving from the form also
