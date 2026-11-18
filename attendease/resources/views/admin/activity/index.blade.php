@@ -14,6 +14,7 @@
         Audit::SESSION_RESTORED => 'badge-approved',
         Audit::SESSION_DELETED => 'badge-absent',
         Audit::CLASS_CREATED => 'badge-present',
+        Audit::CLASS_DELETED => 'badge-absent',
         Audit::SCHEDULE_ADDED => 'badge-present',
         Audit::SCHEDULE_REMOVED => 'badge-absent',
         Audit::JOIN_REQUESTED => 'badge-pending',

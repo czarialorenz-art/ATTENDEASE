@@ -45,6 +45,7 @@ class Audit
     // Classes and students
     public const CLASS_CREATED = 'class_created';
     public const CLASS_UPDATED = 'class_updated';
+    public const CLASS_DELETED = 'class_deleted';
     public const SCHEDULE_ADDED = 'schedule_added';
     public const SCHEDULE_UPDATED = 'schedule_updated';
     public const SCHEDULE_REMOVED = 'schedule_removed';
@@ -88,6 +89,7 @@ class Audit
         'Classes & students' => [
             self::CLASS_CREATED => 'Class created',
             self::CLASS_UPDATED => 'Class edited',
+            self::CLASS_DELETED => 'Class deleted',
             self::SCHEDULE_ADDED => 'Schedule added',
             self::SCHEDULE_UPDATED => 'Schedule edited',
             self::SCHEDULE_REMOVED => 'Schedule removed',

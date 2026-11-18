@@ -68,6 +68,7 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
     Route::get('/classes/{class}', [ClassController::class, 'show'])->name('classes.show');
     Route::get('/classes/{class}/edit', [ClassController::class, 'edit'])->name('classes.edit');
     Route::put('/classes/{class}', [ClassController::class, 'update'])->name('classes.update');
+    Route::delete('/classes/{class}', [ClassController::class, 'destroy'])->name('classes.destroy'); // FR-CLS-14
     Route::put('/classes/{class}/location', [ClassController::class, 'updateLocation'])->name('classes.location');
     // FR-CLS-12: weekly schedules, one at a time
     Route::post('/classes/{class}/schedules', [ClassScheduleController::class, 'store'])->name('schedules.store');

@@ -35,20 +35,41 @@
             <div class="card">
                 <h2 class="h2 mb-3">Classes I teach</h2>
                 @forelse ($teaching as $c)
-                    <a href="{{ route('classes.show', $c) }}" class="-mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-2.5 hover:bg-slate-50">
-                        <div class="min-w-0">
-                            <div class="truncate font-medium">{{ $c->subject }} · {{ $c->section }}</div>
-                            <div class="text-xs text-slate-500">{{ $c->school_term }} · {{ $c->semester }} sem · {{ $c->student_count }} {{ \Illuminate\Support\Str::plural('student', $c->student_count) }} · code <span class="font-mono">{{ $c->code }}</span></div>
-                        </div>
-                        <span class="flex shrink-0 flex-wrap justify-end gap-1">
-                            @if ($c->pending_count)
-                                <span class="badge-pending">{{ $c->pending_count }} pending</span>
-                            @endif
-                            @if ($c->corrections_pending)
-                                <span class="badge-flag">{{ $c->corrections_pending }} {{ \Illuminate\Support\Str::plural('correction', $c->corrections_pending) }}</span>
-                            @endif
-                        </span>
-                    </a>
+                    {{-- FR-CLS-14: each class has a ⋯ menu (open, edit, delete) --}}
+                    @php($needsCode = $c->enrollment_count > 0 || $c->session_count > 0)
+                    <div class="-mx-2 flex items-center gap-2 rounded-lg px-2 py-2.5 hover:bg-slate-50" data-class-row="{{ $c->id }}">
+                        <a href="{{ route('classes.show', $c) }}" class="flex min-w-0 flex-1 items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="truncate font-medium">{{ $c->subject }} · {{ $c->section }}</div>
+                                <div class="text-xs text-slate-500">{{ $c->school_term }} · {{ $c->semester }} sem · {{ $c->student_count }} {{ \Illuminate\Support\Str::plural('student', $c->student_count) }} · code <span class="font-mono">{{ $c->code }}</span></div>
+                            </div>
+                            <span class="flex shrink-0 flex-wrap justify-end gap-1">
+                                @if ($c->pending_count)
+                                    <span class="badge-pending">{{ $c->pending_count }} pending</span>
+                                @endif
+                                @if ($c->corrections_pending)
+                                    <span class="badge-flag">{{ $c->corrections_pending }} {{ \Illuminate\Support\Str::plural('correction', $c->corrections_pending) }}</span>
+                                @endif
+                            </span>
+                        </a>
+                        <details class="relative shrink-0" data-class-menu>
+                            <summary class="grid h-8 w-8 cursor-pointer list-none place-items-center rounded-lg text-slate-500 hover:bg-slate-200 hover:text-slate-800" aria-label="More for {{ $c->subject }} · {{ $c->section }}" title="More">
+                                <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><circle cx="4" cy="10" r="1.6"/><circle cx="10" cy="10" r="1.6"/><circle cx="16" cy="10" r="1.6"/></svg>
+                            </summary>
+                            <div class="absolute right-0 z-20 mt-1 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white text-sm text-slate-700 shadow-lg">
+                                <a href="{{ route('classes.show', $c) }}" class="block px-4 py-2 hover:bg-slate-50">Open class</a>
+                                <a href="{{ route('classes.edit', $c) }}" class="block px-4 py-2 hover:bg-slate-50">Edit details &amp; schedule</a>
+                                <form method="POST" action="{{ route('classes.destroy', $c) }}" class="border-t border-slate-100"
+                                      data-delete-class data-code="{{ $needsCode ? $c->code : '' }}"
+                                      data-name="{{ $c->subject }} · {{ $c->section }}"
+                                      data-summary="{{ $c->enrollment_count }} {{ \Illuminate\Support\Str::plural('student', $c->enrollment_count) }} (incl. requests) and {{ $c->session_count }} {{ \Illuminate\Support\Str::plural('session', $c->session_count) }}">
+                                    @csrf @method('DELETE')
+                                    <input type="hidden" name="confirm_code" value="">
+                                    <button class="block w-full px-4 py-2 text-left text-red-600 hover:bg-red-50">Delete class…</button>
+                                </form>
+                            </div>
+                        </details>
+                    </div>
                 @empty
                     <p class="text-sm text-slate-500">You don't teach any classes yet. Create one to get a join code for your students.</p>
                 @endforelse
@@ -120,6 +141,31 @@
         </section>
         @endif
     </div>
+    @push('scripts')
+    <script>
+        // FR-CLS-14: confirm before deleting a class; one with students or sessions needs its code typed.
+        document.querySelectorAll('[data-delete-class]').forEach((form) => {
+            form.addEventListener('submit', (e) => {
+                const { code, name, summary } = form.dataset;
+                if (!code) {
+                    if (!confirm(`Delete ${name} for good? This can't be undone.`)) e.preventDefault();
+                    return;
+                }
+                const typed = prompt(`Delete ${name} for good?\n\nIt has ${summary}. Its students list, sessions, attendance records, corrections and announcements will all be deleted. This can't be undone.\n\nType the class code ${code} to confirm:`);
+                if (typed === null || typed.trim().toUpperCase() !== code) {
+                    e.preventDefault();
+                    if (typed !== null) alert('The code didn\'t match, so nothing was deleted.');
+                    return;
+                }
+                form.querySelector('[name="confirm_code"]').value = typed.trim().toUpperCase();
+            });
+        });
+        // Close other ⋯ menus when one opens.
+        document.querySelectorAll('[data-class-menu]').forEach((d) => d.addEventListener('toggle', () => {
+            if (d.open) document.querySelectorAll('[data-class-menu][open]').forEach((o) => o !== d && o.removeAttribute('open'));
+        }));
+    </script>
+    @endpush
     @push('scripts')
     <script>
         // Keep both "Today's sessions" cards (teacher and student) current:

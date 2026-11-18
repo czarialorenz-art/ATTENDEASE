@@ -48,6 +48,48 @@ class ClassEnrollmentTest extends TestCase
         $this->assertDatabaseCount('classes', 0);
     }
 
+    /** FR-CLS-14: delete a class from the dashboard's ⋯ menu. */
+    public function test_teacher_deletes_a_class_and_a_class_with_data_needs_its_code(): void
+    {
+        Notification::fake();
+        $teacher = User::factory()->teacher()->create();
+        $empty = $this->makeClass($teacher, ['subject' => 'NETWORKING1', 'section' => 'BSIT3A']);
+        $real = $this->makeClass($teacher, ['subject' => 'CAPSTONE 2', 'section' => 'A']);
+        $student = $this->enroll($real);
+        $session = AttendanceSession::factory()->for($real, 'schoolClass')->create();
+        $record = AttendanceRecord::factory()->create(['attendance_session_id' => $session->id, 'student_id' => $student->id]);
+
+        $this->actingAs($teacher)->get('/dashboard')->assertOk()
+            ->assertSee('data-class-menu', false)->assertSee('Delete class…')
+            ->assertSee('data-code=""', false)                       // empty class: a simple confirmation
+            ->assertSee('data-code="'.$real->code.'"', false);       // class with data: type the code
+
+        // An empty class is deleted right away.
+        $this->actingAs($teacher)->delete("/classes/{$empty->id}")->assertRedirect(route('dashboard'))
+            ->assertSessionHas('status', 'NETWORKING1 · BSIT3A was deleted.');
+        $this->assertNull(SchoolClass::find($empty->id));
+
+        // A class with students and sessions needs its code.
+        $this->actingAs($teacher)->delete("/classes/{$real->id}")->assertSessionHasErrors('confirm');
+        $this->actingAs($teacher)->delete("/classes/{$real->id}", ['confirm_code' => 'WRONG'])->assertSessionHasErrors('confirm');
+        $this->assertNotNull(SchoolClass::find($real->id));
+
+        // Others can't delete it.
+        $this->actingAs($this->makeClass()->teacher)->delete("/classes/{$real->id}", ['confirm_code' => $real->code])->assertForbidden();
+        $this->actingAs($student)->delete("/classes/{$real->id}", ['confirm_code' => $real->code])->assertForbidden();
+
+        $this->actingAs($teacher)->delete("/classes/{$real->id}", ['confirm_code' => strtolower($real->code)])->assertSessionHasNoErrors();
+        $this->assertNull(SchoolClass::find($real->id));
+        $this->assertNull(AttendanceSession::withTrashed()->find($session->id));
+        $this->assertDatabaseMissing('attendance_records', ['id' => $record->id]);
+        $this->assertDatabaseMissing('enrollments', ['class_id' => $real->id]);
+        $this->assertSame(1, User::whereKey($student->id)->count()); // the student's account stays
+
+        $log = \Spatie\Activitylog\Models\Activity::where('event', 'class_deleted')->latest('id')->first();
+        $this->assertStringStartsWith('Deleted class CAPSTONE 2 · A (', $log->description);
+        $this->assertStringEndsWith('with 1 student and 1 session', $log->description);
+    }
+
     public function test_fr_cls_01_validation(): void
     {
         $teacher = User::factory()->teacher()->create();

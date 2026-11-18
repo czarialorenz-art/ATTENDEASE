@@ -26,6 +26,7 @@ class DashboardController extends Controller
             ->when(! $user->isTeacher(), fn ($q) => $q->whereRaw('1 = 0'))
             ->withCount(['enrollments as pending_count' => fn ($q) => $q->where('status', Enrollment::PENDING)])
             ->withCount(['enrollments as student_count' => fn ($q) => $q->where('status', Enrollment::APPROVED)])
+            ->withCount(['enrollments as enrollment_count', 'attendanceSessions as session_count' => fn ($q) => $q->withTrashed()]) // FR-CLS-14
             ->orderByDesc('created_at')
             ->get()
             ->each(fn ($c) => $c->setAttribute('corrections_pending', $c->pendingCorrectionsCount())); // FR-ATT-18

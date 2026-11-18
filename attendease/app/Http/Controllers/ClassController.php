@@ -7,6 +7,7 @@ use App\Models\SchoolClass;
 use App\Services\ClassStatsService;
 use App\Support\Audit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
@@ -105,6 +106,32 @@ class ClassController extends Controller
         }
 
         return redirect()->route('classes.edit', $class)->with('status', 'Classroom location saved.');
+    }
+
+    /**
+     * FR-CLS-14: delete a class for good, with its students list, schedules, sessions, attendance,
+     * corrections and announcements (database cascade). A class that has students or sessions
+     * also needs its class code typed in, so a real class isn't deleted by one click.
+     */
+    public function destroy(Request $request, SchoolClass $class)
+    {
+        $this->authorize('update', $class);
+
+        $students = $class->enrollments()->count();
+        $sessions = $class->attendanceSessions()->withTrashed()->count();
+
+        if (($students || $sessions) && Str::upper(trim((string) $request->input('confirm_code'))) !== $class->code) {
+            return back()->withErrors(['confirm' => Audit::cls($class).' wasn\'t deleted: type its class code '.$class->code
+                .' to confirm (it has '.$students.' '.Str::plural('student', $students).' and '.$sessions.' '.Str::plural('session', $sessions).').']);
+        }
+
+        $label = Audit::cls($class).' ('.$class->school_term.', '.$class->semester.' sem, code '.$class->code.')';
+        DB::transaction(fn () => $class->delete());
+
+        Audit::log(Audit::CLASS_DELETED, 'Deleted class '.$label.' with '.$students.' '.Str::plural('student', $students)
+            .' and '.$sessions.' '.Str::plural('session', $sessions), null, ['class_id' => $class->id]);
+
+        return redirect()->route('dashboard')->with('status', Audit::cls($class).' was deleted.');
     }
 
     private function validated(Request $request): array
