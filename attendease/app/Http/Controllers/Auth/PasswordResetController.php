@@ -66,6 +66,7 @@ class PasswordResetController extends Controller
                 event(new PasswordReset($user));
 
                 $user->notify(new SecurityAlert(SecurityAlert::PASSWORD_CHANGED, $context));
+                \App\Support\Audit::log(\App\Support\Audit::PASSWORD_CHANGED, \App\Support\Audit::who($user).' reset their password with an emailed link', $user, [], $user);
             }
         );
 

@@ -40,7 +40,19 @@
 
     <div class="grid gap-6 lg:grid-cols-2">
         <section class="card">
-            <h2 class="h2 mb-3">Join requests <span class="badge-pending ml-1">{{ $count($pending, 'pending') }}</span></h2>
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 class="h2">Join requests <span class="badge-pending ml-1">{{ $count($pending, 'pending') }}</span></h2>
+                {{-- FR-CLS-13: approve every request shown (all of them, or the ones the filter shows) --}}
+                @if ($pending->count() > 1)
+                    @php($n = $pending->count())
+                    <form method="POST" action="{{ route('enrollments.approve-all', $class) }}"
+                          data-confirm="Approve {{ $filtering ? 'the '.$n.' requests shown' : 'all '.$n.' join requests' }}? Each student will be notified.">
+                        @csrf
+                        @foreach ($pending as $e)<input type="hidden" name="ids[]" value="{{ $e->id }}">@endforeach
+                        <button class="btn-success btn-sm">{{ $filtering ? 'Approve all '.$n.' shown' : 'Approve all ('.$n.')' }}</button>
+                    </form>
+                @endif
+            </div>
             @forelse ($pending as $e)
                 <div class="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 py-2.5 first:border-0">
                     <div>

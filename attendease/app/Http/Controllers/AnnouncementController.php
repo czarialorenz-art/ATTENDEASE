@@ -30,6 +30,7 @@ class AnnouncementController extends Controller
 
         $data = $this->validated($request, $class);
         $announcement = $class->announcements()->create([...$data, 'author_id' => $request->user()->id]);
+        \App\Support\Audit::log(\App\Support\Audit::ANNOUNCEMENT_POSTED, \App\Support\Audit::cls($class).': '.$this->logLabel($announcement), $announcement);
 
         // FR-ANN-02: tell the class (bell + email).
         Notification::send($class->approvedStudents()->get(), new AnnouncementPosted($announcement->load('schoolClass')));
@@ -40,6 +41,12 @@ class AnnouncementController extends Controller
 
         return redirect()->route('announcements.index', $class)
             ->with('status', $status.$this->sessionWarning($class, $announcement));
+    }
+
+    /** "Class cancellation for Nov 20, 2026: "No class"" / ""Quiz on Friday"" */
+    private function logLabel(Announcement $a): string
+    {
+        return ($a->isCancellation() ? 'class cancellation for '.$a->cancelled_date->format('M j, Y').': ' : '').'"'.\Illuminate\Support\Str::limit((string) $a->title, 80).'"';
     }
 
     public function edit(Announcement $announcement)
@@ -56,6 +63,7 @@ class AnnouncementController extends Controller
         $class = $announcement->schoolClass;
 
         $announcement->update($this->validated($request, $class, $announcement));
+        \App\Support\Audit::log(\App\Support\Audit::ANNOUNCEMENT_UPDATED, \App\Support\Audit::cls($class).': '.$this->logLabel($announcement), $announcement);
 
         return redirect()->route('announcements.index', $class)
             ->with('status', 'Announcement updated.'.$this->sessionWarning($class, $announcement));
@@ -65,7 +73,10 @@ class AnnouncementController extends Controller
     {
         $this->authorize('manage', $announcement);
         $classId = $announcement->class_id;
+        $label = \App\Support\Audit::cls($announcement->schoolClass).': '.$this->logLabel($announcement);
+        $class = $announcement->schoolClass;
         $announcement->delete();
+        \App\Support\Audit::log(\App\Support\Audit::ANNOUNCEMENT_DELETED, $label, $class);
 
         return redirect()->route('announcements.index', $classId)->with('status', 'Announcement deleted.');
     }

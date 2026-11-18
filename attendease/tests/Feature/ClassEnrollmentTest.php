@@ -151,6 +151,42 @@ class ClassEnrollmentTest extends TestCase
         $this->assertSame('pending', $eb->fresh()->status);
     }
 
+    /** FR-CLS-13: approve every pending join request at once (or the ones the filter shows). */
+    public function test_teacher_approves_all_join_requests_at_once(): void
+    {
+        Notification::fake();
+        $class = $this->makeClass();
+        $a = $this->enroll($class, User::factory()->create(['name' => 'Ana Cruz', 'course' => 'BSIT', 'year_level' => 1, 'section' => 'A']), Enrollment::PENDING);
+        $b = $this->enroll($class, User::factory()->create(['name' => 'Ben Lim', 'course' => 'BSIT', 'year_level' => 1, 'section' => 'B']), Enrollment::PENDING);
+        $c = $this->enroll($class, User::factory()->create(['name' => 'Cara Uy', 'course' => 'BSIT', 'year_level' => 1, 'section' => 'B']), Enrollment::PENDING);
+        $approved = $this->enroll($class); // already in: untouched
+        $ids = fn (...$users) => Enrollment::whereIn('student_id', collect($users)->pluck('id'))->pluck('id')->all();
+
+        $this->actingAs($class->teacher)->get("/classes/{$class->id}/students")
+            ->assertSee('Approve all (3)')->assertSee('data-confirm="Approve all 3 join requests? Each student will be notified."', false);
+        $this->actingAs($class->teacher)->get("/classes/{$class->id}/students?section=BSIT%201-B")->assertSee('Approve all 2 shown');
+
+        // Only the ones sent (the filtered list), and only this class's pending requests.
+        $other = $this->enroll($this->makeClass(), null, Enrollment::PENDING);
+        $this->actingAs($class->teacher)->post("/classes/{$class->id}/enrollments/approve-all", ['ids' => [...$ids($b, $c), ...$ids($approved, $other)]])
+            ->assertSessionHas('status', '2 students approved and notified.');
+        $this->assertSame([Enrollment::PENDING, Enrollment::APPROVED, Enrollment::APPROVED],
+            [Enrollment::where('student_id', $a->id)->value('status'), Enrollment::where('student_id', $b->id)->value('status'), Enrollment::where('student_id', $c->id)->value('status')]);
+        $this->assertSame(Enrollment::PENDING, Enrollment::where('student_id', $other->id)->value('status'));
+        Notification::assertSentTo([$b, $c], \App\Notifications\JoinRequestDecided::class);
+        $this->assertSame(2, \Spatie\Activitylog\Models\Activity::where('event', 'join_approved')->count());
+
+        // One request left: no "Approve all"; handled requests are skipped.
+        $this->actingAs($class->teacher)->get("/classes/{$class->id}/students")->assertDontSee('Approve all');
+        $this->actingAs($class->teacher)->post("/classes/{$class->id}/enrollments/approve-all", ['ids' => $ids($b)])
+            ->assertSessionHas('status', 'Those requests were already handled.');
+
+        // Only the class's teacher.
+        $this->actingAs($this->makeClass()->teacher)->post("/classes/{$class->id}/enrollments/approve-all", ['ids' => $ids($a)])->assertForbidden();
+        $this->actingAs($a)->post("/classes/{$class->id}/enrollments/approve-all", ['ids' => $ids($a)])->assertForbidden();
+        $this->assertSame(Enrollment::PENDING, Enrollment::where('student_id', $a->id)->value('status'));
+    }
+
     public function test_students_page_shows_each_students_section(): void
     {
         $class = $this->makeClass();

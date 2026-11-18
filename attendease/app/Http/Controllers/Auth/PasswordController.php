@@ -39,6 +39,7 @@ class PasswordController extends Controller
             ->delete();
 
         $user->notify(new SecurityAlert(SecurityAlert::PASSWORD_CHANGED, RequestContext::capture($request)));
+        \App\Support\Audit::log(\App\Support\Audit::PASSWORD_CHANGED, \App\Support\Audit::who($user).' changed their password', $user);
 
         return back()->with('status', 'Password changed. Your other sessions have been signed out.');
     }

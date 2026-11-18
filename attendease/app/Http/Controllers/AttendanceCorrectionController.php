@@ -59,6 +59,11 @@ class AttendanceCorrectionController extends Controller
         $session = $record->attendanceSession->load('schoolClass.teacher');
         $session->schoolClass->teacher->notify(new CorrectionRequested($correction->load('student'), $session));
 
+        \App\Support\Audit::log(\App\Support\Audit::CORRECTION_REQUESTED,
+            \App\Support\Audit::who($request->user()).' · '.\App\Support\Audit::cls($session->schoolClass).' · '.$session->date->format('M j, Y')
+                .': asked '.ucfirst($correction->current_status).' → '.ucfirst($correction->requested_status).' — "'.\Illuminate\Support\Str::limit($correction->reason, 120).'"',
+            $correction);
+
         return back()->with('status', 'Correction request sent. Your teacher will review it.');
     }
 
@@ -124,6 +129,12 @@ class AttendanceCorrectionController extends Controller
         });
 
         $correction->student->notify(new CorrectionDecided($correction->fresh(), $session->load('schoolClass')));
+
+        \App\Support\Audit::log($status === AttendanceCorrection::APPROVED ? \App\Support\Audit::CORRECTION_APPROVED : \App\Support\Audit::CORRECTION_REJECTED,
+            \App\Support\Audit::who($correction->student).' · '.\App\Support\Audit::cls($session->schoolClass).' · '.$session->date->format('M j, Y')
+                .': '.ucfirst($correction->current_status).' → '.ucfirst($correction->requested_status).' '.($status === AttendanceCorrection::APPROVED ? 'approved' : 'rejected')
+                .($correction->teacher_note ? ' — note: "'.\Illuminate\Support\Str::limit($correction->teacher_note, 120).'"' : ''),
+            $correction);
 
         return back()->with('status', $correction->student->name."'s request was ".($status === AttendanceCorrection::APPROVED ? 'approved' : 'rejected').'.');
     }

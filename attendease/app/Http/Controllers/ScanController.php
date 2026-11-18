@@ -63,6 +63,11 @@ class ScanController extends Controller
         $record = $result['record'];
         $status = $stage === AttendanceSession::TIME_IN ? ' — '.ucfirst($record->status) : '';
 
+        // FR-LOG-02: the student's own scan (repeat scans aren't logged).
+        \App\Support\Audit::log(\App\Support\Audit::ATTENDANCE_SCANNED,
+            \App\Support\Audit::who($request->user()).' · '.\App\Support\Audit::cls($session->schoolClass).' · '.$session->date->format('M j, Y').': '.$label.' at '.now()->format('g:i A').($status ? ' ('.ucfirst($record->status).')' : ''),
+            $record, ['stage' => $stage, 'status' => $record->status, 'session_id' => $session->id]);
+
         return $this->respond($request, true, "{$label} recorded{$status}",
             $session->schoolClass->label().' · '.now()->format('M j, Y g:i A'));
     }

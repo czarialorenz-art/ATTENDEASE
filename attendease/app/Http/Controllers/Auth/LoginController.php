@@ -69,9 +69,15 @@ class LoginController extends Controller
 
         $user = $request->user();
 
-        if ($devices->touch($user, $request)) {
+        $newDevice = $devices->touch($user, $request);
+        if ($newDevice) {
             $user->notify(new SecurityAlert(SecurityAlert::NEW_SIGN_IN, RequestContext::capture($request)));
         }
+
+        // FR-LOG-02: successful sign-ins only (failed attempts aren't logged).
+        \App\Support\Audit::log(\App\Support\Audit::LOGGED_IN,
+            \App\Support\Audit::who($user).' logged in with their '.($field === 'email' ? 'email' : 'ID number').' · IP '.$request->ip().($newDevice ? ' · new browser' : ''),
+            $user, ['ip' => $request->ip()], $user);
 
         return redirect()->intended($user->isAdmin() ? route('admin.dashboard') : route('dashboard'));
     }

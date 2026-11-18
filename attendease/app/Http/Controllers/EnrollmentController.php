@@ -7,6 +7,7 @@ use App\Models\SchoolClass;
 use App\Notifications\JoinRequestDecided;
 use App\Notifications\JoinRequestReceived;
 use App\Notifications\RemovedFromClass;
+use App\Support\Audit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -106,6 +107,7 @@ class EnrollmentController extends Controller
 
         // New, previously rejected, or previously removed: (re)open a pending request.
         $enrollment->fill(['status' => Enrollment::PENDING, 'decided_at' => null])->save();
+        Audit::log(Audit::JOIN_REQUESTED, Audit::who($user).' asked to join '.Audit::cls($class).' (code '.$class->code.')', $enrollment);
 
         $class->teacher->notify(new JoinRequestReceived($enrollment->load('schoolClass', 'student')));
 
@@ -136,14 +138,54 @@ class EnrollmentController extends Controller
             return back()->withErrors(['enrollment' => 'This request was already handled.']);
         }
 
+        $this->apply($enrollment, $status, $verb);
+
+        return back()->with('status', $enrollment->student->name.' '.$verb.'.');
+    }
+
+    /** Saves the decision, logs it (FR-LOG-02) and tells the student (FR-CLS-07). */
+    private function apply(Enrollment $enrollment, string $status, string $verb): void
+    {
         $enrollment->update(['status' => $status, 'decided_at' => now()]);
         $enrollment->load('schoolClass', 'student');
+        Audit::log(
+            [Enrollment::APPROVED => Audit::JOIN_APPROVED, Enrollment::REJECTED => Audit::JOIN_REJECTED, Enrollment::REMOVED => Audit::STUDENT_REMOVED][$status],
+            Audit::who($enrollment->student).' '.($status === Enrollment::REMOVED ? 'removed from ' : $verb.' to join ').Audit::cls($enrollment->schoolClass),
+            $enrollment,
+        );
 
-        // FR-CLS-07
         $enrollment->student->notify($status === Enrollment::REMOVED
             ? new RemovedFromClass($enrollment)
             : new JoinRequestDecided($enrollment));
+    }
 
-        return back()->with('status', $enrollment->student->name.' '.$verb.'.');
+    /**
+     * FR-CLS-13: approve every pending join request on the Students page at once (or the ones
+     * the search / section filter shows: their IDs are sent). Requests already handled are skipped.
+     */
+    public function approveAll(Request $request, SchoolClass $class)
+    {
+        $this->authorize('teach', $class);
+
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'max:1000'],
+            'ids.*' => ['integer'],
+        ], ['ids.required' => 'There are no join requests to approve.']);
+
+        $pending = $class->enrollments()
+            ->whereIn('id', $data['ids'])
+            ->where('status', Enrollment::PENDING)
+            ->with('student')
+            ->get();
+
+        foreach ($pending as $enrollment) {
+            $this->apply($enrollment, Enrollment::APPROVED, 'approved');
+        }
+
+        $n = $pending->count();
+
+        return back()->with('status', $n
+            ? $n.' '.Str::plural('student', $n).' approved and notified.'
+            : 'Those requests were already handled.');
     }
 }

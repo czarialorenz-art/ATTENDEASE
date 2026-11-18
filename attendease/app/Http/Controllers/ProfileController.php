@@ -51,7 +51,12 @@ class ProfileController extends Controller
         }
 
         $oldEmail = $user->email;
+        $labels = ['name' => 'Name', 'email' => 'Email', 'id_number' => 'ID number', 'course' => 'Course', 'year_level' => 'Year level', 'section' => 'Section', 'department' => 'Department'];
+        $before = $user->only(array_keys($labels));
         $user->update($data);
+        if ($changes = \App\Support\Audit::diff($before, $user, $labels)) {
+            \App\Support\Audit::log(\App\Support\Audit::PROFILE_UPDATED, \App\Support\Audit::who($user).' updated their profile: '.$changes, $user);
+        }
 
         if ($oldEmail !== $user->email && filled($oldEmail)) {
             Notification::route('mail', $oldEmail)->notify(new SecurityAlert(

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ClassSchedule;
 use App\Models\SchoolClass;
+use App\Support\Audit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
@@ -21,6 +22,7 @@ class ClassScheduleController extends Controller
 
         $data = $this->validated($request, $class, null, 'addSchedule');
         $schedule = $class->schedules()->create($data);
+        Audit::log(Audit::SCHEDULE_ADDED, Audit::cls($class).': added '.$this->label($schedule), $schedule);
 
         return redirect()->route('classes.edit', $class)->with('status', 'Schedule added: '.$this->label($schedule).'.');
     }
@@ -30,7 +32,11 @@ class ClassScheduleController extends Controller
         $class = $schedule->schoolClass;
         $this->authorize('update', $class);
 
+        $before = $this->label($schedule);
         $schedule->update($this->validated($request, $class, $schedule, 'schedule'.$schedule->id));
+        if ($before !== $this->label($schedule)) {
+            Audit::log(Audit::SCHEDULE_UPDATED, Audit::cls($class).': '.$before.' → '.$this->label($schedule), $schedule);
+        }
 
         return redirect()->route('classes.edit', $class)->with('status', 'Schedule updated: '.$this->label($schedule).'.');
     }
@@ -42,6 +48,7 @@ class ClassScheduleController extends Controller
 
         $label = $this->label($schedule);
         $schedule->delete();
+        Audit::log(Audit::SCHEDULE_REMOVED, Audit::cls($class).': removed '.$label, $class);
 
         return redirect()->route('classes.edit', $class)->with('status', 'Schedule removed: '.$label.'.');
     }

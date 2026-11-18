@@ -5,12 +5,19 @@ namespace App\Http\Controllers;
 use App\Models\Enrollment;
 use App\Models\SchoolClass;
 use App\Services\ClassStatsService;
+use App\Support\Audit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class ClassController extends Controller
 {
+    /** Class details shown in "Class edited" log entries (FR-LOG-02). */
+    private const DETAIL_LABELS = [
+        'subject' => 'Subject', 'year_level' => 'Year level', 'section' => 'Section', 'school_term' => 'School term',
+        'semester' => 'Semester', 'semester_start' => 'Semester start', 'semester_end' => 'Semester end',
+    ];
+
     public function create()
     {
         return view('classes.create');
@@ -20,6 +27,7 @@ class ClassController extends Controller
     public function store(Request $request)
     {
         $class = $request->user()->taughtClasses()->create($this->validated($request));
+        Audit::log(Audit::CLASS_CREATED, 'Created class '.Audit::cls($class).' ('.$class->school_term.', '.$class->semester.' sem) · code '.$class->code, $class);
 
         return redirect()->route('classes.show', $class)->with('status', 'Class created. Share the code '.$class->code.' with your students.');
     }
@@ -62,7 +70,11 @@ class ClassController extends Controller
     public function update(Request $request, SchoolClass $class)
     {
         $this->authorize('update', $class);
+        $old = $class->only(array_keys(self::DETAIL_LABELS));
         $class->update($this->validated($request));
+        if ($changes = Audit::diff($old, $class, self::DETAIL_LABELS)) {
+            Audit::log(Audit::CLASS_UPDATED, Audit::cls($class).': '.$changes, $class);
+        }
 
         return redirect()->route('classes.edit', $class)->with('status', 'Class details saved.');
     }
@@ -81,11 +93,16 @@ class ClassController extends Controller
             'room' => ['nullable', 'string', 'max:100'],
         ]);
 
+        $old = $class->only(['building', 'floor', 'room']);
         $class->update([
             'building' => filled($data['building'] ?? null) ? trim($data['building']) : null,
             'floor' => filled($data['floor'] ?? null) ? trim($data['floor']) : null,
             'room' => filled($data['room'] ?? null) ? trim($data['room']) : null,
         ]);
+
+        if ($changes = Audit::diff($old, $class, ['building' => 'Building', 'floor' => 'Floor', 'room' => 'Room'])) {
+            Audit::log(Audit::CLASS_UPDATED, Audit::cls($class).' classroom location: '.$changes, $class);
+        }
 
         return redirect()->route('classes.edit', $class)->with('status', 'Classroom location saved.');
     }

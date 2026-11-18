@@ -8,6 +8,7 @@ use App\Models\SchoolClass;
 use App\Models\User;
 use App\Services\AttendanceService;
 use App\Services\QrTokenService;
+use App\Support\Audit;
 use chillerlan\QRCode\QRCode;
 use chillerlan\QRCode\QROptions;
 use Illuminate\Http\Request;
@@ -16,6 +17,12 @@ use Illuminate\Validation\Rule;
 class AttendanceSessionController extends Controller
 {
     public function __construct(private AttendanceService $attendance) {}
+
+    /** "ITE101 · BSIT-1A · Nov 17, 2026 (Week 3)" for the activity log. */
+    private function label(AttendanceSession $session): string
+    {
+        return Audit::cls($session->schoolClass).' · '.$session->date->format('M j, Y').($session->title ? ' ('.$session->title.')' : '');
+    }
 
     /** Active sessions, or ?archived=1 for archived ones (FR-ATT-16). */
     public function index(Request $request, SchoolClass $class)
@@ -94,6 +101,7 @@ class AttendanceSessionController extends Controller
         }
 
         $attendanceSession->delete(); // soft delete: sets archived_at
+        Audit::log(Audit::SESSION_ARCHIVED, 'Archived session '.$this->label($attendanceSession), $attendanceSession);
 
         return redirect()->route('sessions.index', $attendanceSession->class_id)->with('status',
             'Session archived. It will be deleted for good on '.$attendanceSession->deletesOn()->format('M j, Y').' unless you restore it.');
@@ -109,7 +117,10 @@ class AttendanceSessionController extends Controller
 
         $classId = $attendanceSession->class_id;
         $label = $attendanceSession->date->format('M j, Y');
+        $logLabel = $this->label($attendanceSession);
+        $class = $attendanceSession->schoolClass;
         $attendanceSession->forceDelete(); // records and scans go with it (cascade)
+        Audit::log(Audit::SESSION_DELETED, 'Deleted session '.$logLabel.' for good, with its attendance records', $class);
 
         return redirect()->route('sessions.index', [$classId, 'archived' => 1])
             ->with('status', "The {$label} session was deleted for good.");
@@ -120,6 +131,7 @@ class AttendanceSessionController extends Controller
         $this->authorize('manage', $attendanceSession);
 
         $attendanceSession->restore();
+        Audit::log(Audit::SESSION_RESTORED, 'Restored session '.$this->label($attendanceSession), $attendanceSession);
 
         return redirect()->route('sessions.index', $attendanceSession->class_id)->with('status', 'Session restored.');
     }
@@ -137,6 +149,7 @@ class AttendanceSessionController extends Controller
         $data['grace_minutes'] ??= 15;
 
         $session = $class->attendanceSessions()->create($data);
+        Audit::log(Audit::SESSION_CREATED, 'Created session '.$this->label($session).' · grace '.$session->grace_minutes.' min', $session);
 
         // FR-ANN-04: warn (don't block) when this date was announced as cancelled.
         $cancelled = $class->cancellationOn($session->date);
@@ -211,6 +224,7 @@ class AttendanceSessionController extends Controller
             return back()->withErrors(['date' => $problem."; it wouldn't count in semester totals. Update the semester dates first."])->withInput();
         }
 
+        $old = $attendanceSession->only(['date', 'title', 'grace_minutes']);
         $attendanceSession->update([
             'title' => $data['title'] ?? null,
             ...(isset($data['date']) && ! $attendanceSession->hasStarted() ? ['date' => $data['date']] : []),
@@ -218,6 +232,10 @@ class AttendanceSessionController extends Controller
 
         if ((int) $data['grace_minutes'] !== $attendanceSession->grace_minutes) {
             $this->attendance->updateGrace($attendanceSession, (int) $data['grace_minutes']);
+        }
+        $attendanceSession->refresh();
+        if ($changes = Audit::diff($old, $attendanceSession, ['date' => 'Date', 'title' => 'Title', 'grace_minutes' => 'Grace (min)'])) {
+            Audit::log(Audit::SESSION_UPDATED, 'Session '.$this->label($attendanceSession).': '.$changes, $attendanceSession);
         }
 
         return $request->boolean('from_edit')
@@ -232,6 +250,7 @@ class AttendanceSessionController extends Controller
         if ($error = $this->attendance->openStage($attendanceSession, $stage)) {
             return back()->withErrors(['stage' => $error]);
         }
+        Audit::log(Audit::STAGE_OPENED, 'Opened '.AttendanceSession::stageLabel($stage).' · '.$this->label($attendanceSession), $attendanceSession, ['stage' => $stage]);
 
         return redirect()->route('sessions.live', $attendanceSession);
     }
@@ -243,6 +262,7 @@ class AttendanceSessionController extends Controller
         if ($error = $this->attendance->closeStage($attendanceSession, $stage)) {
             return back()->withErrors(['stage' => $error]);
         }
+        Audit::log(Audit::STAGE_CLOSED, 'Closed '.AttendanceSession::stageLabel($stage).' · '.$this->label($attendanceSession), $attendanceSession, ['stage' => $stage]);
 
         return redirect()->route('sessions.show', $attendanceSession)
             ->with('status', AttendanceSession::stageLabel($stage).' closed.');
