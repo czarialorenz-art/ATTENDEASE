@@ -35,12 +35,12 @@
 
             <div class="mt-6 mb-2 flex items-baseline justify-between gap-2">
                 <h2 class="h2">Weekly schedule</h2>
-                <a href="{{ route('classes.edit', $class) }}#schedules" class="text-sm font-medium text-brand-600 hover:underline">Manage schedule</a>
+                <a href="{{ route('classes.schedule', $class) }}" class="text-sm font-medium text-brand-600 hover:underline">Manage schedule</a>
             </div>
             @forelse ($class->schedules as $row)
                 <div class="text-sm">{{ $row->dayName() }} · {{ $row->timeRange() }}</div>
             @empty
-                <p class="text-sm text-slate-500">No schedule set. <a href="{{ route('classes.edit', $class) }}#schedules" class="text-brand-600 hover:underline">Add one</a>.</p>
+                <p class="text-sm text-slate-500">No schedule set. <a href="{{ route('classes.schedule', $class) }}" class="text-brand-600 hover:underline">Add one</a>.</p>
             @endforelse
             <p class="mt-2 text-sm text-slate-500">
                 Classroom: {{ $class->locationLabel() ?? 'not set' }}

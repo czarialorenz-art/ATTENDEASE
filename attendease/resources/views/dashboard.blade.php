@@ -58,7 +58,10 @@
                             </summary>
                             <div class="absolute right-0 z-20 mt-1 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white text-sm text-slate-700 shadow-lg">
                                 <a href="{{ route('classes.show', $c) }}" class="block px-4 py-2 hover:bg-slate-50">Open class</a>
-                                <a href="{{ route('classes.edit', $c) }}" class="block px-4 py-2 hover:bg-slate-50">Edit details &amp; schedule</a>
+                                {{-- FR-CLS-17 --}}
+                                <a href="{{ route('classes.edit', $c) }}" class="block px-4 py-2 hover:bg-slate-50">Edit class details</a>
+                                <button type="button" class="block w-full px-4 py-2 text-left hover:bg-slate-50" data-copy="#class-code-{{ $c->id }}">Copy class code</button>
+                                <span id="class-code-{{ $c->id }}" class="hidden">{{ $c->code }}</span>
                                 <form method="POST" action="{{ route('classes.destroy', $c) }}" class="border-t border-slate-100"
                                       data-delete-class data-code="{{ $needsCode ? $c->code : '' }}"
                                       data-name="{{ $c->subject }} · {{ $c->section }}"

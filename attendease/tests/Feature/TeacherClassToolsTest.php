@@ -158,8 +158,10 @@ class TeacherClassToolsTest extends TestCase
     {
         $this->reportScenario();
 
-        $page = $this->actingAs($this->teacher)->get("/classes/{$this->class->id}/report?period=month&date=2026-11-10&status=absent&q=dela+cruz");
-        $pdfUrl = route('reports.pdf', [$this->class, 'period' => 'month', 'date' => '2026-11-10', 'status' => 'absent', 'q' => 'dela cruz']);
+        // A search matching several students keeps the class grid (one match would show the student record, FR-RPT-06).
+        $page = $this->actingAs($this->teacher)->get("/classes/{$this->class->id}/report?period=month&month_mode=whole&month=2026-11&status=absent&q=2023-0000");
+        $pdfUrl = route('reports.pdf', [$this->class, ...$page->viewData('query')]);
+        $this->assertSame(['period' => 'month', 'month_mode' => 'whole', 'month' => '2026-11', 'status' => 'absent', 'q' => '2023-0000'], $page->viewData('query'));
         $page->assertSee(e($pdfUrl), false);
 
         // The PDF is built from the same filtered rows and names the filter in its heading.
@@ -169,7 +171,7 @@ class TeacherClassToolsTest extends TestCase
         $data = (new \ReflectionMethod(ReportController::class, 'data'))
             ->invoke(app(ReportController::class), Request::create($pdfUrl), $this->class);
         $html = view('pdf.attendance-report', $data)->render();
-        $this->assertStringContainsString('Status: Absent · Search: dela cruz · 1 of 3 students', $html);
+        $this->assertStringContainsString('Status: Absent · Search: 2023-0000 · 1 of 3 students with at least one Absent', $html);
         $this->assertStringContainsString('Dela Cruz, Ana', $html);
         $this->assertStringNotContainsString('Lim, Ben', $html);
     }

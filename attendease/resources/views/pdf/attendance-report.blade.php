@@ -26,14 +26,15 @@
         .m-L { color: #b45309; background: #fdf0d9; }
         .m-A { color: #b42318; background: #fde8e6; }
         .totals { border-left: 2px solid #555 !important; }
+        .dash { color: #bbb; font-weight: normal; }
         .note { margin-top: 8px; font-style: italic; color: #444; }
     </style>
 </head>
 <body>
     <h1>{{ $schoolName }}</h1>
-    <h2>{{ $title }}</h2>
-    @if ($filtering){{-- FR-RPT-05: the filters used for this download --}}
-        <p style="text-align:center; margin:-6px 0 8px; font-weight:bold;">{{ $filterLabel }} · {{ $rows->count() }} of {{ $totalStudents }} students</p>
+    <h2>{{ $fullTitle }}</h2>{{-- FR-RPT-07: the exact range --}}
+    @if ($filterLabel !== ''){{-- FR-RPT-05: the filters used for this download --}}
+        <p style="text-align:center; margin:-6px 0 8px; font-weight:bold;">{{ $filterLabel }} · {{ $rows->count() }} of {{ $totalStudents }} students{{ $status !== 'all' ? ' with at least one '.$statuses[$status] : '' }}</p>
     @endif
 
     <table class="meta">
@@ -60,8 +61,10 @@
                     @foreach ($block as $col)
                         <th class="d">{{ $col['day'] }}<small>{{ $col['sub'] }}</small></th>
                     @endforeach
-                    @if ($last)
+                    @if ($last && $status === 'all')
                         <th class="c totals">P</th><th class="c">L</th><th class="c">A</th>
+                    @elseif ($last)
+                        <th class="c totals">{{ $statusMark }}</th>
                     @endif
                 </tr>
             </thead>
@@ -74,15 +77,23 @@
                         <td>{{ $r['student']->sectionCode() ?? '—' }}</td>
                         @foreach ($block as $col)
                             @php($mark = $r['marks'][$col['id']])
-                            <td class="m m-{{ $mark }}">{{ $mark }}</td>
+                            {{-- FR-RPT-05: with a status filter, only that status is marked --}}
+                            @if ($statusMark === null || $mark === $statusMark)
+                                <td class="m m-{{ $mark }}">{{ $mark }}</td>
+                            @else
+                                <td class="m dash">–</td>
+                            @endif
                         @endforeach
-                        @if ($last)
+                        @if ($last && $status === 'all')
                             <td class="c totals">{{ $r['present'] }}</td>
                             <td class="c">{{ $r['late'] }}</td>
-                            <td class="c">{{ $r['absent'] }}</td>                        @endif
+                            <td class="c">{{ $r['absent'] }}</td>
+                        @elseif ($last)
+                            <td class="c totals">{{ $r[$status] }}</td>
+                        @endif
                     </tr>
                 @empty
-                    <tr><td colspan="{{ 4 + $block->count() + ($last ? 3 : 0) }}" class="c">No students.</td></tr>
+                    <tr><td colspan="{{ 4 + $block->count() + ($last ? ($status === 'all' ? 3 : 1) : 0) }}" class="c">{{ $filtering ? 'No students match these filters.' : 'No students.' }}</td></tr>
                 @endforelse
             </tbody>
         </table>

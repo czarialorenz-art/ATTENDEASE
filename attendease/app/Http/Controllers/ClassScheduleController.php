@@ -24,7 +24,7 @@ class ClassScheduleController extends Controller
         $schedule = $class->schedules()->create($data);
         Audit::log(Audit::SCHEDULE_ADDED, Audit::cls($class).': added '.$this->label($schedule), $schedule);
 
-        return redirect()->route('classes.edit', $class)->with('status', 'Schedule added: '.$this->label($schedule).'.');
+        return redirect()->route('classes.schedule', $class)->with('status', 'Schedule added: '.$this->label($schedule).'.');
     }
 
     public function update(Request $request, ClassSchedule $schedule)
@@ -38,7 +38,7 @@ class ClassScheduleController extends Controller
             Audit::log(Audit::SCHEDULE_UPDATED, Audit::cls($class).': '.$before.' → '.$this->label($schedule), $schedule);
         }
 
-        return redirect()->route('classes.edit', $class)->with('status', 'Schedule updated: '.$this->label($schedule).'.');
+        return redirect()->route('classes.schedule', $class)->with('status', 'Schedule updated: '.$this->label($schedule).'.');
     }
 
     public function destroy(ClassSchedule $schedule)
@@ -50,7 +50,7 @@ class ClassScheduleController extends Controller
         $schedule->delete();
         Audit::log(Audit::SCHEDULE_REMOVED, Audit::cls($class).': removed '.$label, $class);
 
-        return redirect()->route('classes.edit', $class)->with('status', 'Schedule removed: '.$label.'.');
+        return redirect()->route('classes.schedule', $class)->with('status', 'Schedule removed: '.$label.'.');
     }
 
     /** "Monday 8:00 AM – 9:30 AM" */

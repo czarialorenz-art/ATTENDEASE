@@ -27,7 +27,8 @@ class ClassController extends Controller
     /** FR-CLS-01/02: the creator becomes the class's teacher. */
     public function store(Request $request)
     {
-        $class = $request->user()->taughtClasses()->create($this->validated($request));
+        // FR-CLS-17: the classroom location (optional) is set together with the class details.
+        $class = $request->user()->taughtClasses()->create([...$this->validated($request), ...$this->location($request)]);
         Audit::log(Audit::CLASS_CREATED, 'Created class '.Audit::cls($class).' ('.$class->school_term.', '.$class->semester.' sem) · code '.$class->code, $class);
 
         return redirect()->route('classes.show', $class)->with('status', 'Class created. Share the code '.$class->code.' with your students.');
@@ -61,11 +62,20 @@ class ClassController extends Controller
         ]);
     }
 
+    /** FR-CLS-17: "Edit class details" (from the "…" menu): the class details and the classroom location. */
     public function edit(SchoolClass $class)
     {
         $this->authorize('update', $class);
 
-        return view('classes.edit', ['class' => $class->load('schedules')]);
+        return view('classes.edit', ['class' => $class]);
+    }
+
+    /** FR-CLS-17: the Schedule tab holds only the weekly schedule (FR-CLS-12). */
+    public function schedule(SchoolClass $class)
+    {
+        $this->authorize('update', $class);
+
+        return view('classes.schedule', ['class' => $class->load('schedules')]);
     }
 
     public function update(Request $request, SchoolClass $class)
@@ -88,18 +98,8 @@ class ClassController extends Controller
     {
         $this->authorize('update', $class);
 
-        $data = $request->validateWithBag('location', [
-            'building' => ['nullable', 'string', 'max:100'],
-            'floor' => ['nullable', 'string', 'max:50'],
-            'room' => ['nullable', 'string', 'max:100'],
-        ]);
-
         $old = $class->only(['building', 'floor', 'room']);
-        $class->update([
-            'building' => filled($data['building'] ?? null) ? trim($data['building']) : null,
-            'floor' => filled($data['floor'] ?? null) ? trim($data['floor']) : null,
-            'room' => filled($data['room'] ?? null) ? trim($data['room']) : null,
-        ]);
+        $class->update($this->location($request, 'location'));
 
         if ($changes = Audit::diff($old, $class, ['building' => 'Building', 'floor' => 'Floor', 'room' => 'Room'])) {
             Audit::log(Audit::CLASS_UPDATED, Audit::cls($class).' classroom location: '.$changes, $class);
@@ -132,6 +132,19 @@ class ClassController extends Controller
             .' and '.$sessions.' '.Str::plural('session', $sessions), null, ['class_id' => $class->id]);
 
         return redirect()->route('dashboard')->with('status', Audit::cls($class).' was deleted.');
+    }
+
+    /** FR-CLS-03: building, floor and room, all optional; blanks are saved as empty. */
+    private function location(Request $request, string $bag = 'default'): array
+    {
+        $data = $request->validateWithBag($bag, [
+            'building' => ['nullable', 'string', 'max:100'],
+            'floor' => ['nullable', 'string', 'max:50'],
+            'room' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        return collect(['building', 'floor', 'room'])
+            ->mapWithKeys(fn ($f) => [$f => filled($data[$f] ?? null) ? trim($data[$f]) : null])->all();
     }
 
     private function validated(Request $request): array

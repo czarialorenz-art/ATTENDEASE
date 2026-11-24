@@ -82,7 +82,7 @@ class ReportTest extends TestCase
         $this->assertSame([4, 3, 1, 0], $counts($report(''))); // semester is the default
         $this->assertSame([0, 0, 0, 0], $counts($report('period=day&date=2026-09-03')));
 
-        $report('period=week&date=2026-09-03')->assertSee('Weekly Attendance Summary')->assertSee('Week of Aug 31 – Sep 6, 2026');
+        $report('period=week&date=2026-09-03')->assertSee('Weekly Attendance Summary')->assertSee('Aug 31 – Sep 6, 2026');
         $report('period=month&date=2026-09-20')->assertSee('Monthly Attendance Summary')->assertSee('September 2026');
         $report('period=day&date=2026-09-04')->assertSee('Daily Attendance Summary')->assertSee('Friday, Sep 4, 2026');
 
@@ -94,7 +94,7 @@ class ReportTest extends TestCase
         $this->actingAs($teacher)->get("/classes/{$class->id}/report.pdf?period=month&date=2026-09-20")
             ->assertOk()->assertDownload($base.'_Attendance_2026-09.pdf');
         $this->actingAs($teacher)->get("/classes/{$class->id}/report.pdf?period=week&date=2026-09-03")
-            ->assertOk()->assertDownload($base.'_Attendance_Week_2026-08-31.pdf');
+            ->assertOk()->assertDownload($base.'_Attendance_2026-08-31_to_2026-09-06.pdf');
     }
 
     public function test_fr_rpt_02_period_is_shown_in_the_semester_line(): void
@@ -106,7 +106,7 @@ class ReportTest extends TestCase
         $this->assertSame('1st semester (Aug 1, 2026 – Dec 15, 2026)', $header['Semester']);
 
         $week = $this->actingAs($t)->get("/classes/{$c->id}/report?period=week&date=2026-09-03")->viewData('header');
-        $this->assertSame('1st semester · Week of Aug 31 – Sep 6, 2026', $week['Semester']);
+        $this->assertSame('1st semester · Aug 31 – Sep 6, 2026', $week['Semester']);
 
         // Same header in the PDF: no "Period:" row.
         $html = view('pdf.attendance-report', $this->actingAs($t)->get("/classes/{$c->id}/report")->original->getData())->render();

@@ -21,17 +21,17 @@ class ClassScheduleTest extends TestCase
     {
         $class = $this->makeClass();
 
-        $this->actingAs($class->teacher)->get("/classes/{$class->id}/edit")->assertOk()
+        $this->actingAs($class->teacher)->get("/classes/{$class->id}/schedule")->assertOk()
             ->assertSee('No schedules yet.')->assertSee('Add a schedule')->assertSee('+ Add schedule');
 
         $this->add($class, ['day_of_week' => 1, 'start_time' => '08:00', 'end_time' => '09:30'])
-            ->assertRedirect(route('classes.edit', $class))->assertSessionHas('status', 'Schedule added: Monday 8:00 AM – 9:30 AM.');
+            ->assertRedirect(route('classes.schedule', $class))->assertSessionHas('status', 'Schedule added: Monday 8:00 AM – 9:30 AM.');
         $this->add($class, ['day_of_week' => 3, 'start_time' => '13:00', 'end_time' => '16:00'])->assertSessionHasNoErrors();
 
         $this->assertSame([[1, '08:00:00', '09:30:00'], [3, '13:00:00', '16:00:00']],
             $class->schedules()->get()->map(fn ($s) => [$s->day_of_week, $s->start_time, $s->end_time])->all());
 
-        $this->actingAs($class->teacher)->get("/classes/{$class->id}/edit")
+        $this->actingAs($class->teacher)->get("/classes/{$class->id}/schedule")
             ->assertSeeInOrder(['Monday', '8:00 AM – 9:30 AM', '1 h 30 min', 'Wednesday', '1:00 PM – 4:00 PM', '3 h'])
             ->assertSee('2 schedules');
         $this->actingAs($class->teacher)->get("/classes/{$class->id}")->assertSee('Monday · 8:00 AM – 9:30 AM')->assertSee('Manage schedule');
@@ -49,7 +49,7 @@ class ClassScheduleTest extends TestCase
 
         // The error shows on the Add form only.
         $this->add($class, ['day_of_week' => 1, 'start_time' => '10:00', 'end_time' => '09:00']);
-        $this->actingAs($class->teacher)->get("/classes/{$class->id}/edit")->assertSee('The end time must be after the start time.');
+        $this->actingAs($class->teacher)->get("/classes/{$class->id}/schedule")->assertSee('The end time must be after the start time.');
     }
 
     public function test_schedules_cannot_overlap_this_class_or_the_teachers_other_classes(): void
@@ -86,7 +86,7 @@ class ClassScheduleTest extends TestCase
         [$morning, $afternoon] = $class->schedules()->get()->all();
 
         $this->actingAs($class->teacher)->put("/schedules/{$morning->id}", ['day_of_week' => 5, 'start_time' => '07:30', 'end_time' => '09:00'])
-            ->assertRedirect(route('classes.edit', $class))->assertSessionHas('status', 'Schedule updated: Friday 7:30 AM – 9:00 AM.');
+            ->assertRedirect(route('classes.schedule', $class))->assertSessionHas('status', 'Schedule updated: Friday 7:30 AM – 9:00 AM.');
         $this->assertSame([5, '07:30:00', '09:00:00'], [$morning->fresh()->day_of_week, $morning->fresh()->start_time, $morning->fresh()->end_time]);
 
         // Editing a schedule doesn't clash with itself, but does with the others.
@@ -97,7 +97,7 @@ class ClassScheduleTest extends TestCase
         $this->assertSame('13:30:00', $afternoon->fresh()->start_time);
 
         // The failed edit form reopens with its error; the others stay closed.
-        $html = $this->actingAs($class->teacher)->get("/classes/{$class->id}/edit")->getContent();
+        $html = $this->actingAs($class->teacher)->get("/classes/{$class->id}/schedule")->getContent();
         $this->assertStringContainsString('This overlaps this class&#039;s Friday 7:30 AM – 9:00 AM schedule.', $html);
         $this->assertMatchesRegularExpression('/id="edit-schedule-'.$afternoon->id.'"\s+class="mt-3 space-y-3 rounded-lg bg-slate-50 p-3"/', $html);
         $this->assertMatchesRegularExpression('/id="edit-schedule-'.$morning->id.'"\s+class="mt-3 space-y-3 rounded-lg bg-slate-50 p-3 hidden"/', $html);
@@ -109,9 +109,9 @@ class ClassScheduleTest extends TestCase
         $this->add($class, ['day_of_week' => 1, 'start_time' => '08:00', 'end_time' => '09:30']);
         $schedule = $class->schedules()->first();
 
-        $this->actingAs($class->teacher)->get("/classes/{$class->id}/edit")->assertSee('data-confirm="Remove the Monday 8:00 AM – 9:30 AM schedule?', false);
+        $this->actingAs($class->teacher)->get("/classes/{$class->id}/schedule")->assertSee('data-confirm="Remove the Monday 8:00 AM – 9:30 AM schedule?', false);
         $this->actingAs($class->teacher)->delete("/schedules/{$schedule->id}")
-            ->assertRedirect(route('classes.edit', $class))->assertSessionHas('status', 'Schedule removed: Monday 8:00 AM – 9:30 AM.');
+            ->assertRedirect(route('classes.schedule', $class))->assertSessionHas('status', 'Schedule removed: Monday 8:00 AM – 9:30 AM.');
         $this->assertSame(0, $class->schedules()->count());
     }
 

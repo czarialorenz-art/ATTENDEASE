@@ -39,6 +39,7 @@
     </form>
 
     <div class="grid gap-6 lg:grid-cols-2">
+        <div class="space-y-6">
         <section class="card">
             <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h2 class="h2">Join requests <span class="badge-pending ml-1">{{ $count($pending, 'pending') }}</span></h2>
@@ -75,6 +76,8 @@
                 </p>
             @endforelse
         </section>
+        @include('classes._class-list-check')
+        </div>
 
         <section class="card">
             <h2 class="h2 mb-3">Enrolled students <span class="badge-neutral ml-1">{{ $count($approved, 'approved') }}</span></h2>

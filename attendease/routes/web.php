@@ -13,6 +13,7 @@ use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\ClassController;
+use App\Http\Controllers\ClassListCheckController;
 use App\Http\Controllers\ClassScheduleController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EnrollmentController;
@@ -66,7 +67,8 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
     Route::post('/classes', [ClassController::class, 'store'])->middleware('role:teacher')->name('classes.store');
     Route::post('/classes/join', [EnrollmentController::class, 'join'])->middleware('role:student')->name('classes.join');
     Route::get('/classes/{class}', [ClassController::class, 'show'])->name('classes.show');
-    Route::get('/classes/{class}/edit', [ClassController::class, 'edit'])->name('classes.edit');
+    Route::get('/classes/{class}/edit', [ClassController::class, 'edit'])->name('classes.edit'); // FR-CLS-17: details & location
+    Route::get('/classes/{class}/schedule', [ClassController::class, 'schedule'])->name('classes.schedule'); // FR-CLS-17: Schedule tab
     Route::put('/classes/{class}', [ClassController::class, 'update'])->name('classes.update');
     Route::delete('/classes/{class}', [ClassController::class, 'destroy'])->name('classes.destroy'); // FR-CLS-14
     Route::put('/classes/{class}/location', [ClassController::class, 'updateLocation'])->name('classes.location');
@@ -76,6 +78,12 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
     Route::delete('/schedules/{schedule}', [ClassScheduleController::class, 'destroy'])->name('schedules.destroy');
     Route::get('/classes/{class}/students', [EnrollmentController::class, 'index'])->name('classes.students');
     Route::get('/classes/{class}/students/{student}/attendance', [EnrollmentController::class, 'attendance'])->name('classes.student-attendance'); // FR-CLS-15
+    // FR-CLS-16: check a class list (Name, Section) against who has joined; read only
+    Route::post('/classes/{class}/class-list-check', [ClassListCheckController::class, 'check'])->name('class-list.check');
+    Route::delete('/classes/{class}/class-list-check', [ClassListCheckController::class, 'clear'])->name('class-list.clear');
+    Route::get('/classes/{class}/class-list-check/result.csv', [ClassListCheckController::class, 'result'])->name('class-list.result');
+    Route::get('/classes/{class}/class-list-check/template.{format}', [ClassListCheckController::class, 'template'])
+        ->whereIn('format', ['csv', 'xlsx'])->name('class-list.template');
     Route::post('/classes/{class}/enrollments/approve-all', [EnrollmentController::class, 'approveAll'])->name('enrollments.approve-all'); // FR-CLS-13
     Route::post('/enrollments/{enrollment}/approve', [EnrollmentController::class, 'approve'])->name('enrollments.approve');
     Route::post('/enrollments/{enrollment}/reject', [EnrollmentController::class, 'reject'])->name('enrollments.reject');
