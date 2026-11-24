@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AttendanceRecord;
 use App\Models\Enrollment;
 use App\Models\SchoolClass;
+use App\Models\User;
 use App\Notifications\JoinRequestDecided;
 use App\Notifications\JoinRequestReceived;
 use App\Notifications\RemovedFromClass;
+use App\Services\ClassStatsService;
 use App\Support\Audit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -21,7 +24,7 @@ class EnrollmentController extends Controller
      * FR-CLS-05: pending requests and the approved roster.
      * FR-CLS-10: filter by the student's section and search by name (or student number / email).
      */
-    public function index(Request $request, SchoolClass $class)
+    public function index(Request $request, SchoolClass $class, ClassStatsService $stats)
     {
         $this->authorize('teach', $class);
 
@@ -64,8 +67,13 @@ class EnrollmentController extends Controller
                 || Str::contains(Str::lower((string) $s->email), $needle);
         });
 
+        // FR-CLS-15: each enrolled student's semester attendance rate, the same numbers as their own class page.
+        $rates = $stats->termReport($class, $filtered->where('status', Enrollment::APPROVED)->pluck('student'))['rows']
+            ->mapWithKeys(fn ($r) => [$r['student']->id => $r['rate']]);
+
         return view('classes.students', [
             'class' => $class,
+            'rates' => $rates,
             'pending' => $filtered->where('status', Enrollment::PENDING),
             'approved' => $filtered->where('status', Enrollment::APPROVED),
             'removed' => $filtered->where('status', Enrollment::REMOVED),
@@ -75,6 +83,38 @@ class EnrollmentController extends Controller
             'search' => $search,
             'section' => $section,
             'filtering' => $search !== '' || $section !== '',
+        ]);
+    }
+
+    /**
+     * FR-CLS-15: "View attendance" from the Students tab: one student's semester summary in this
+     * class (the same numbers as the student's own class page) and their records, newest first.
+     * The class's teacher only; the student must be, or have been, enrolled.
+     */
+    public function attendance(SchoolClass $class, User $student, ClassStatsService $stats)
+    {
+        $this->authorize('teach', $class);
+
+        $enrollment = $class->enrollments()->where('student_id', $student->id)
+            ->whereIn('status', [Enrollment::APPROVED, Enrollment::REMOVED])->first();
+        abort_unless($enrollment, 404);
+
+        $summary = $stats->termReport($class, collect([$student]));
+
+        $records = AttendanceRecord::where('student_id', $student->id)
+            ->whereHas('attendanceSession', fn ($q) => $q->where('class_id', $class->id))
+            ->with('attendanceSession')
+            ->get()
+            ->sortByDesc(fn ($r) => $r->attendanceSession->date->toDateString().sprintf('|%010d', $r->attendance_session_id))
+            ->values();
+
+        return view('classes.student-attendance', [
+            'class' => $class,
+            'student' => $student,
+            'removed' => $enrollment->status === Enrollment::REMOVED,
+            'mine' => $summary['rows']->first(),
+            'held' => $summary['held'],
+            'records' => $records,
         ]);
     }
 
@@ -185,7 +225,7 @@ class EnrollmentController extends Controller
         $n = $pending->count();
 
         return back()->with('status', $n
-            ? $n.' '.Str::plural('student', $n).' approved and notified.'
+            ? $n.' '.Str::plural('student', $n).' approved.' // FR-CLS-13: each one is notified in apply()
             : 'Those requests were already handled.');
     }
 }

@@ -55,15 +55,15 @@ class AttendanceTest extends TestCase
 
     public function test_fr_att_01_create_session_with_default_grace(): void
     {
-        $this->actingAs($this->teacher)->post("/classes/{$this->class->id}/sessions", ['date' => '2026-11-12'])->assertRedirect();
+        // FR-ATT-20: no date is sent; the server uses today.
+        $this->actingAs($this->teacher)->post("/classes/{$this->class->id}/sessions")->assertRedirect();
 
         $s = AttendanceSession::first();
         $this->assertSame(15, $s->grace_minutes);
         $this->assertSame('2026-11-12', $s->date->toDateString());
 
-        $this->actingAs($this->teacher)->post("/classes/{$this->class->id}/sessions", ['date' => ''])->assertSessionHasErrors('date');
-        $this->actingAs($this->teacher)->post("/classes/{$this->class->id}/sessions", ['date' => '2026-11-12', 'grace_minutes' => -1])->assertSessionHasErrors('grace_minutes');
-        $this->actingAs($this->teacher)->post("/classes/{$this->class->id}/sessions", ['date' => '2026-11-12', 'grace_minutes' => 0])->assertSessionHasNoErrors();
+        $this->actingAs($this->teacher)->post("/classes/{$this->class->id}/sessions", ['grace_minutes' => -1])->assertSessionHasErrors('grace_minutes');
+        $this->actingAs($this->teacher)->post("/classes/{$this->class->id}/sessions", ['grace_minutes' => 0])->assertSessionHasNoErrors();
     }
 
     public function test_fr_att_01_grace_change_recalculates_qr_time_in_but_not_manual(): void

@@ -7,19 +7,42 @@
         <form method="POST" action="{{ route('sessions.store', $class) }}" class="card h-fit space-y-4 lg:col-span-1" novalidate>
             @csrf
             <h2 class="h2">New session</h2>
-            {{-- FR-ATT-19: limited to the semester; a live warning (and the server) explain any date outside it --}}
-            <x-field name="date" label="Date" type="date" :value="now()->toDateString()" required help="Stages can only be opened on this date."
-                :min="$class->semester_start->toDateString()" :max="$class->semester_end->toDateString()"
-                data-semester-start="{{ $class->semester_start->toDateString() }}" data-semester-end="{{ $class->semester_end->toDateString() }}"
-                data-semester-start-label="{{ $class->semester_start->format('M j, Y') }}" data-semester-end-label="{{ $class->semester_end->format('M j, Y') }}" />
-            <div id="semester-warning" @class(['rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900', 'hidden' => ! $errors->has('date')]) role="status">
-                <p data-semester-message></p>
-                <a href="{{ route('classes.edit', $class) }}" class="mt-1 inline-block font-semibold underline">Fix semester dates →</a>
+
+            {{-- FR-ATT-20: a new session is always for today (Manila); today's schedule is shown read-only --}}
+            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm" data-today-schedule>
+                @forelse ($todaySchedules as $row)
+                    <div>
+                        <span class="font-medium text-slate-900">Today · {{ $today->format('l, M j') }}</span>
+                        · {{ $row->timeRange() }}@if ($room = $row->room ?: $class->locationLabel()) · {{ $room }}@endif
+                    </div>
+                @empty
+                    <div class="font-medium text-slate-900">Today · {{ $today->format('l, M j') }}</div>
+                @endforelse
             </div>
-            <p class="-mt-2 text-xs text-slate-500">Semester: {{ $class->semester_start->format('M j, Y') }} – {{ $class->semester_end->format('M j, Y') }}</p>
+
+            @if ($todaySchedules->isEmpty() && ! $todayProblem)
+                <p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status" data-no-schedule>
+                    This class isn't scheduled today. You can still create a session for a make-up class.
+                </p>
+            @endif
+
+            @if ($todaySession && ! $todayProblem)
+                <p class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900" role="status" data-today-exists>
+                    A session for today already exists. <a href="{{ route('sessions.show', $todaySession) }}" class="font-semibold underline">Open it →</a>
+                </p>
+            @endif
+
+            {{-- FR-ATT-19: today outside the semester is blocked (also on the server), with a link to fix the dates --}}
+            @if ($todayProblem || $errors->has('date'))
+                <div id="semester-warning" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
+                    <p>{{ $errors->first('date') ?: $todayProblem.'; it wouldn\'t count in semester totals. Update the semester dates first.' }}</p>
+                    <a href="{{ route('classes.edit', $class) }}" class="mt-1 inline-block font-semibold underline">Fix semester dates →</a>
+                </div>
+            @endif
+            <p class="text-xs text-slate-500">Semester: {{ $class->semester_start->format('M j, Y') }} – {{ $class->semester_end->format('M j, Y') }}. To use another date, edit the session after creating it.</p>
             <x-field name="title" label="Title" placeholder="Optional, e.g. Week 5 lecture" />
             <x-field name="grace_minutes" label="Grace period (minutes)" type="number" :value="15" min="0" help="Scans within this time after Time In opens are Present; later ones are Late." />
-            <button class="btn-primary w-full">Create session</button>
+            <button class="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50" @disabled($todayProblem)>Create session</button>
         </form>
         @endunless
 
@@ -159,33 +182,4 @@
             <div class="mt-4">{{ $sessions->links() }}</div>
         </div>
     </div>
-    @push('scripts')
-    <script>
-        // FR-ATT-19: warn as soon as the chosen date is outside the semester (the server blocks it too).
-        (() => {
-            const input = document.querySelector('input[name="date"][data-semester-start]');
-            const box = document.getElementById('semester-warning');
-            if (!input || !box) return;
-            const msg = box.querySelector('[data-semester-message]');
-            const hadServerError = !box.classList.contains('hidden');
-
-            function check() {
-                const v = input.value; // YYYY-MM-DD, compares correctly as text
-                let text = '';
-                if (v && v < input.dataset.semesterStart) {
-                    text = `This date is before the semester starts (${input.dataset.semesterStartLabel}); it won't count in semester totals.`;
-                } else if (v && v > input.dataset.semesterEnd) {
-                    text = `This date is after the semester ends (${input.dataset.semesterEndLabel}); it won't count in semester totals.`;
-                }
-                msg.textContent = text;
-                box.classList.toggle('hidden', !text && !hadServerError);
-                if (text) msg.classList.remove('hidden'); else msg.classList.add('hidden');
-            }
-
-            input.addEventListener('input', check);
-            input.addEventListener('change', check);
-            check();
-        })();
-    </script>
-    @endpush
 </x-layouts.app>

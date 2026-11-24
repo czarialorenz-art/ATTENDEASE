@@ -204,22 +204,30 @@ class SessionArchiveTest extends TestCase
         // Semester for this class: Aug 1 – Dec 15, 2026.
         $url = "/classes/{$this->class->id}/sessions";
 
-        $this->actingAs($this->teacher)->post($url, ['date' => '2026-12-16'])
+        // FR-ATT-20: the session date is today (Manila), so "today" is what is checked.
+        $this->freezeManila('2026-12-16 09:00:00');
+        $this->actingAs($this->teacher)->post($url, ['date' => '2026-12-01'])
             ->assertSessionHasErrors(['date' => "This date is after the semester ends (Dec 15, 2026); it wouldn't count in semester totals. Update the semester dates first."]);
-        $this->actingAs($this->teacher)->post($url, ['date' => '2026-07-31'])
+        // The form shows the block, a link to fix the dates, and a disabled button.
+        $this->actingAs($this->teacher)->get($url)->assertOk()
+            ->assertSee('id="semester-warning"', false)
+            ->assertSee(route('classes.edit', $this->class), false)
+            ->assertSee('Semester: Aug 1, 2026 – Dec 15, 2026')
+            ->assertSee('disabled>Create session', false);
+
+        $this->freezeManila('2026-07-31 09:00:00');
+        $this->actingAs($this->teacher)->post($url)
             ->assertSessionHasErrors(['date' => "This date is before the semester starts (Aug 1, 2026); it wouldn't count in semester totals. Update the semester dates first."]);
         $this->assertSame(0, AttendanceSession::count());
 
         // First and last day are fine.
-        $this->actingAs($this->teacher)->post($url, ['date' => '2026-08-01'])->assertSessionHasNoErrors();
-        $this->actingAs($this->teacher)->post($url, ['date' => '2026-12-15'])->assertSessionHasNoErrors();
-
-        // The form limits the picker and has the live warning with a link to fix the dates.
-        $this->actingAs($this->teacher)->get($url)->assertOk()
-            ->assertSee('min="2026-08-01"', false)->assertSee('max="2026-12-15"', false)
-            ->assertSee('id="semester-warning"', false)
-            ->assertSee(route('classes.edit', $this->class), false)
-            ->assertSee('Semester: Aug 1, 2026 – Dec 15, 2026');
+        $this->freezeManila('2026-08-01 07:00:00');
+        $this->actingAs($this->teacher)->post($url)->assertSessionHasNoErrors();
+        $this->freezeManila('2026-12-15 18:00:00');
+        $this->actingAs($this->teacher)->post($url)->assertSessionHasNoErrors();
+        $this->assertSame(['2026-08-01', '2026-12-15'], AttendanceSession::orderBy('date')->get()->map(fn ($s) => $s->date->toDateString())->all());
+        $this->actingAs($this->teacher)->get($url)->assertDontSee('id="semester-warning"', false)
+            ->assertDontSee('type="date"', false); // no Date field on the New session form
     }
 
     public function test_fr_att_19_a_date_change_must_stay_inside_the_semester(): void

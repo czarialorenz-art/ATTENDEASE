@@ -9,6 +9,7 @@ use App\Support\FileName;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 /**
@@ -22,6 +23,14 @@ class ReportController extends Controller
         'week' => 'Weekly',
         'month' => 'Monthly',
         'semester' => 'Semester',
+    ];
+
+    /** FR-RPT-05: status filter. "all" keeps every student; the others keep those with at least one such mark. */
+    public const STATUSES = [
+        'all' => 'All',
+        'present' => 'Present',
+        'late' => 'Late',
+        'absent' => 'Absent',
     ];
 
     /** Date columns per table in the PDF download (portrait A4). */
@@ -56,7 +65,9 @@ class ReportController extends Controller
         $request->validate([
             'period' => ['nullable', Rule::in(array_keys(self::PERIODS))],
             'date' => ['nullable', 'date_format:Y-m-d'],
-        ]);
+            'status' => ['nullable', Rule::in(array_keys(self::STATUSES))], // FR-RPT-05
+            'q' => ['nullable', 'string', 'max:100'],
+        ], [], ['q' => 'search']);
 
         $period = $request->input('period', 'semester');
         $date = $request->filled('date')
@@ -87,6 +98,30 @@ class ReportController extends Controller
         $report = $this->stats->termReport($class, $students, [$from->toDateString(), $to->toDateString()]);
 
         $rows = $report['rows']->map(fn ($r) => [...$r, 'removed' => $r['student']->pivot->status === Enrollment::REMOVED]);
+
+        // FR-RPT-05: search (name or ID number) and status filter. A status keeps the students with at
+        // least one such mark in the period (a held session with no record is Absent), most first.
+        $status = $request->input('status') ?: 'all';
+        $search = trim((string) $request->input('q'));
+        $totalStudents = $rows->count();
+        $needle = Str::lower($search);
+        if ($needle !== '') {
+            $rows = $rows->filter(fn ($r) => Str::contains(Str::lower($r['student']->name), $needle)
+                || Str::contains(Str::lower($r['student']->listName()), $needle)
+                || Str::contains(Str::lower((string) $r['student']->id_number), $needle));
+        }
+        if ($status !== 'all') {
+            // Stable sort: equal counts keep the surname order.
+            $rows = $rows->filter(fn ($r) => $r[$status] > 0)
+                ->values()->map(fn ($r, $i) => [...$r, '_i' => $i])
+                ->sort(fn ($a, $b) => [$b[$status], $a['_i']] <=> [$a[$status], $b['_i']]);
+        }
+        $rows = $rows->values();
+        $filters = array_filter([
+            'Status' => $status !== 'all' ? self::STATUSES[$status] : null,
+            'Search' => $search !== '' ? $search : null,
+        ]);
+        $filterLabel = collect($filters)->map(fn ($v, $k) => $k.': '.$v)->implode(' · ');
 
         // FR-RPT-04: one grid column per held session. Two sessions on one day get "#1", "#2".
         $perDay = $report['sessions']->countBy(fn ($s) => $s->date->toDateString());
@@ -132,8 +167,15 @@ class ReportController extends Controller
             'period' => $period,
             'periods' => self::PERIODS,
             'date' => $date,
-            'query' => ['period' => $period, 'date' => $date->toDateString()],
+            // The PDF link carries the same period and filters (FR-RPT-05).
+            'query' => ['period' => $period, 'date' => $date->toDateString(), ...($status !== 'all' ? ['status' => $status] : []), ...($search !== '' ? ['q' => $search] : [])],
             'rows' => $rows,
+            'status' => $status,
+            'statuses' => self::STATUSES,
+            'search' => $search,
+            'filtering' => $filters !== [],
+            'filterLabel' => $filterLabel,
+            'totalStudents' => $totalStudents,
             'held' => $report['held'],
             'header' => [
                 'Subject' => $class->subject,

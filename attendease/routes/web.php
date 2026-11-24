@@ -75,6 +75,7 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
     Route::put('/schedules/{schedule}', [ClassScheduleController::class, 'update'])->name('schedules.update');
     Route::delete('/schedules/{schedule}', [ClassScheduleController::class, 'destroy'])->name('schedules.destroy');
     Route::get('/classes/{class}/students', [EnrollmentController::class, 'index'])->name('classes.students');
+    Route::get('/classes/{class}/students/{student}/attendance', [EnrollmentController::class, 'attendance'])->name('classes.student-attendance'); // FR-CLS-15
     Route::post('/classes/{class}/enrollments/approve-all', [EnrollmentController::class, 'approveAll'])->name('enrollments.approve-all'); // FR-CLS-13
     Route::post('/enrollments/{enrollment}/approve', [EnrollmentController::class, 'approve'])->name('enrollments.approve');
     Route::post('/enrollments/{enrollment}/reject', [EnrollmentController::class, 'reject'])->name('enrollments.reject');

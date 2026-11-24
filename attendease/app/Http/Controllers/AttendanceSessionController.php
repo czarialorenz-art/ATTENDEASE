@@ -45,8 +45,16 @@ class AttendanceSessionController extends Controller
             $query->where(fn ($q) => $this->matchSearch($q, $search));
         }
 
+        // FR-ATT-20: the New session form is for today (Manila): show today's schedule, and whether
+        // a session for today already exists or today is outside the semester.
+        $today = $this->today();
+
         return view('sessions.index', [
             'class' => $class,
+            'today' => $today,
+            'todaySchedules' => $class->schedules()->where('day_of_week', $today->dayOfWeek)->orderBy('start_time')->get(),
+            'todaySession' => $class->attendanceSessions()->whereDate('date', $today->toDateString())->latest()->first(),
+            'todayProblem' => $class->semesterProblem($today),
             'archived' => $archived,
             'search' => $search,
             'sessions' => $query->paginate(20)->withQueryString(),
@@ -136,17 +144,31 @@ class AttendanceSessionController extends Controller
         return redirect()->route('sessions.index', $attendanceSession->class_id)->with('status', 'Session restored.');
     }
 
-    /** FR-ATT-01 */
+    /** FR-ATT-20: "today" for new sessions is the school's day, in Manila. */
+    private function today(): \Illuminate\Support\Carbon
+    {
+        return now('Asia/Manila')->startOfDay();
+    }
+
+    /**
+     * FR-ATT-01, FR-ATT-20: a new session is always for today (Manila), set here on the server;
+     * a date sent with the request is ignored. Teachers fix a date on the Edit page.
+     */
     public function store(Request $request, SchoolClass $class)
     {
         $this->authorize('teach', $class);
 
         $data = $request->validate([
-            'date' => ['required', 'date', $this->withinSemester($class)],
             'title' => ['nullable', 'string', 'max:255'],
             'grace_minutes' => ['nullable', 'integer', 'min:0', 'max:1440'],
         ]);
         $data['grace_minutes'] ??= 15;
+        $data['date'] = $this->today()->toDateString();
+
+        // FR-ATT-19: still blocked when today is outside the semester (the form links to the fix).
+        if ($problem = $class->semesterProblem($data['date'])) {
+            return back()->withInput()->withErrors(['date' => $problem.'; it wouldn\'t count in semester totals. Update the semester dates first.']);
+        }
 
         $session = $class->attendanceSessions()->create($data);
         Audit::log(Audit::SESSION_CREATED, 'Created session '.$this->label($session).' · grace '.$session->grace_minutes.' min', $session);
@@ -156,24 +178,6 @@ class AttendanceSessionController extends Controller
 
         return redirect()->route('sessions.show', $session)->with('status', 'Session created.'
             .($cancelled ? ' Note: you announced that class is cancelled on '.$session->date->format('M j, Y').'.' : ''));
-    }
-
-    /**
-     * FR-ATT-19: sessions must fall inside the class's semester, or they wouldn't count in
-     * semester totals. The form shows a link to fix the semester dates next to this error.
-     */
-    private function withinSemester(SchoolClass $class): \Closure
-    {
-        return function (string $attribute, mixed $value, \Closure $fail) use ($class) {
-            try {
-                $problem = $class->semesterProblem((string) $value);
-            } catch (\Throwable) {
-                return; // not a date: the "date" rule reports it
-            }
-            if ($problem) {
-                $fail($problem.'; it wouldn\'t count in semester totals. Update the semester dates first.');
-            }
-        };
     }
 
     /** FR-ATT-12: records and manual edits. */

@@ -211,15 +211,16 @@ class ClassEnrollmentTest extends TestCase
         // Only the ones sent (the filtered list), and only this class's pending requests.
         $other = $this->enroll($this->makeClass(), null, Enrollment::PENDING);
         $this->actingAs($class->teacher)->post("/classes/{$class->id}/enrollments/approve-all", ['ids' => [...$ids($b, $c), ...$ids($approved, $other)]])
-            ->assertSessionHas('status', '2 students approved and notified.');
+            ->assertSessionHas('status', '2 students approved.');
         $this->assertSame([Enrollment::PENDING, Enrollment::APPROVED, Enrollment::APPROVED],
             [Enrollment::where('student_id', $a->id)->value('status'), Enrollment::where('student_id', $b->id)->value('status'), Enrollment::where('student_id', $c->id)->value('status')]);
         $this->assertSame(Enrollment::PENDING, Enrollment::where('student_id', $other->id)->value('status'));
         Notification::assertSentTo([$b, $c], \App\Notifications\JoinRequestDecided::class);
         $this->assertSame(2, \Spatie\Activitylog\Models\Activity::where('event', 'join_approved')->count());
 
-        // One request left: no "Approve all"; handled requests are skipped.
-        $this->actingAs($class->teacher)->get("/classes/{$class->id}/students")->assertDontSee('Approve all');
+        // One request left: "Approve all (1)" still shows (FR-CLS-13); handled requests are skipped.
+        $this->actingAs($class->teacher)->get("/classes/{$class->id}/students")->assertSee('Approve all (1)')
+            ->assertSee('data-confirm="Approve all 1 join request? Each student will be notified."', false);
         $this->actingAs($class->teacher)->post("/classes/{$class->id}/enrollments/approve-all", ['ids' => $ids($b)])
             ->assertSessionHas('status', 'Those requests were already handled.');
 

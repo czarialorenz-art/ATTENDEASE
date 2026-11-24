@@ -84,7 +84,7 @@
                         <tbody>
                             @forelse ($students as $student)
                                 @php($r = $records->get($student->id))
-                                <tr>
+                                <tr id="student-{{ $student->id }}" class="target:bg-amber-50">{{-- FR-CLS-15: "View attendance" links here --}}
                                     <td>
                                         <div class="font-medium whitespace-nowrap">{{ $student->listName() }}</div>
                                         <div class="font-mono text-xs text-slate-500">{{ $student->id_number }}</div>

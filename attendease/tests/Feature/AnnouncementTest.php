@@ -105,7 +105,8 @@ class AnnouncementTest extends TestCase
         $this->actingAs($this->class->teacher)->get("/sessions/{$existing->id}")
             ->assertSee('You announced that class is cancelled on this date.');
 
-        $this->actingAs($this->class->teacher)->post("/classes/{$this->class->id}/sessions", ['date' => '2026-11-16'])
+        $this->freezeManila('2026-11-16 08:00:00'); // FR-ATT-20: new sessions are for today
+        $this->actingAs($this->class->teacher)->post("/classes/{$this->class->id}/sessions")
             ->assertSessionHas('status', 'Session created. Note: you announced that class is cancelled on Nov 16, 2026.');
     }
 

@@ -32,6 +32,9 @@
 <body>
     <h1>{{ $schoolName }}</h1>
     <h2>{{ $title }}</h2>
+    @if ($filtering){{-- FR-RPT-05: the filters used for this download --}}
+        <p style="text-align:center; margin:-6px 0 8px; font-weight:bold;">{{ $filterLabel }} · {{ $rows->count() }} of {{ $totalStudents }} students</p>
+    @endif
 
     <table class="meta">
         @foreach (array_chunk($header, 2, true) as $chunk) {{-- two pairs per row fit a portrait page --}}

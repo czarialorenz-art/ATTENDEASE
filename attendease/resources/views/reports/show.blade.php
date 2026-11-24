@@ -2,7 +2,7 @@
     <x-class-nav :class="$class" active="report" />
 
     {{-- Period picker: day, week, month or semester --}}
-    <form method="GET" class="card mb-5 flex flex-col gap-4 sm:flex-row sm:items-end" id="period-form">
+    <form method="GET" class="card mb-5 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end" id="period-form">
         <fieldset>
             <legend class="label">Report period</legend>
             <div class="inline-flex flex-wrap rounded-lg border border-slate-300 bg-white p-1">
@@ -24,7 +24,30 @@
             <input type="date" id="date" name="date" value="{{ $date->toDateString() }}" class="input">
         </div>
 
-        <button class="btn-primary sm:ml-auto">Show report</button>
+        {{-- FR-RPT-05: search and status filter, kept together with the period --}}
+        <div class="min-w-0 sm:flex-1">
+            <label for="report-search" class="label">Search</label>
+            <input type="search" id="report-search" name="q" value="{{ $search }}" maxlength="100" autocomplete="off"
+                placeholder="Name or ID number" @class(['input', 'input-error' => $errors->has('q')])>
+        </div>
+        <div class="sm:w-36">
+            <label for="report-status" class="label">Status</label>
+            <select id="report-status" name="status" @class(['input', 'input-error' => $errors->has('status')])>
+                @foreach ($statuses as $key => $label)
+                    <option value="{{ $key }}" @selected($status === $key)>{{ $label }}</option>
+                @endforeach
+            </select>
+        </div>
+
+        <div class="flex gap-2">
+            <button class="btn-primary">Show report</button>
+            @if ($filtering)
+                <a href="{{ route('reports.show', [$class, 'period' => $period, 'date' => $date->toDateString()]) }}" class="btn-secondary">Clear</a>
+            @endif
+        </div>
+        @if ($errors->hasAny(['status', 'q', 'period', 'date']))
+            <p class="error w-full sm:basis-full">{{ $errors->first() }}</p>
+        @endif
     </form>
 
     <div class="card">
@@ -36,6 +59,9 @@
                     @foreach ($header as $label => $value)
                         <dt class="text-slate-500">{{ $label }}</dt><dd>{{ $value }}</dd>
                     @endforeach
+                    @if ($filtering)
+                        <dt class="text-slate-500">Filter</dt><dd class="font-medium" data-filter-label>{{ $filterLabel }}</dd>
+                    @endif
                 </dl>
             </div>
             <div class="flex gap-2">
@@ -48,6 +74,10 @@
             $markClass = ['P' => 'bg-emerald-100 text-emerald-800', 'L' => 'bg-amber-100 text-amber-800', 'A' => 'bg-red-100 text-red-800'];
             $markLabel = ['P' => 'Present', 'L' => 'Late', 'A' => 'Absent'];
         @endphp
+        {{-- FR-RPT-05 --}}
+        <p class="mb-2 text-sm text-slate-500" data-showing>
+            Showing {{ $rows->count() }} of {{ $totalStudents }} {{ \Illuminate\Support\Str::plural('student', $totalStudents) }}@if ($status !== 'all'), most {{ strtolower($statuses[$status]) }} first @endif
+        </p>
         <div class="table-wrap">
             <table class="table">
                 <thead>
@@ -85,7 +115,13 @@
                             <td class="text-center">{{ $r['late'] }}</td>
                             <td class="text-center">{{ $r['absent'] }}</td>                        </tr>
                     @empty
-                        <tr><td colspan="{{ 7 + $columns->count() }}" class="py-6 text-center text-slate-500">No students.</td></tr>
+                        <tr><td colspan="{{ 7 + $columns->count() }}" class="py-6 text-center text-slate-500">
+                            @if ($filtering && $totalStudents > 0)
+                                No students match these filters for this period. Try another status or search, or <a href="{{ route('reports.show', [$class, 'period' => $period, 'date' => $date->toDateString()]) }}" class="text-brand-600 underline">clear the filters</a>.
+                            @else
+                                No students.
+                            @endif
+                        </td></tr>
                     @endforelse
                 </tbody>
             </table>

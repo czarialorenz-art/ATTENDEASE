@@ -66,7 +66,7 @@ class ActivityLogTest extends TestCase
         $this->assertSame('Ana Cruz (S-1) approved to join CAPSTONE 2 · A & B', $this->last(Audit::JOIN_APPROVED)->description);
 
         // Session: created, stages, edited, archived, restored.
-        $this->actingAs($teacher)->post("/classes/{$class->id}/sessions", ['date' => '2026-11-12', 'title' => 'Week 3']);
+        $this->actingAs($teacher)->post("/classes/{$class->id}/sessions", ['title' => 'Week 3']); // today: Nov 12
         $session = $class->attendanceSessions()->sole();
         $this->assertSame('Created session CAPSTONE 2 · A & B · Nov 12, 2026 (Week 3) · grace 15 min', $this->last(Audit::SESSION_CREATED)->description);
         $this->actingAs($teacher)->post("/sessions/{$session->id}/stages/time_in/open");
