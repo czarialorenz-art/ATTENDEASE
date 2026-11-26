@@ -44,14 +44,21 @@ class ClassListCheckController extends Controller
     {
         $this->authorize('teach', $class);
 
+        // Section is optional, and one file can hold several sections (FR-CLS-16).
         return Excel::download(
-            new ArrayExport(['Name', 'Section'], [['Loreno, Maria Teresa', '4-B'], ['Juan Dela Cruz', 'BSIT 4-A']]),
+            new ArrayExport(['Name', 'Section (optional)'], [
+                ['Loreno, Maria Teresa', '4-B'],
+                ['Albao, John Andrei', '4-B'],
+                ['Dela Cruz, Juan', '4-A'],
+                ['Terrado, Precious A.', '4-A'],
+                ['Reyes, Ana', ''],
+            ]),
             'class-list-template.'.$format,
             $format === 'csv' ? ExcelFormat::CSV : ExcelFormat::XLSX,
         );
     }
 
-    /** The last result as CSV: Group, Name, Section (from the file), Student No., Section on record. */
+    /** The last result as CSV: Group, Name, Section (from the file), Student No., Section on record, Row. */
     public function result(Request $request, SchoolClass $class)
     {
         $this->authorize('teach', $class);
@@ -61,15 +68,16 @@ class ClassListCheckController extends Controller
         $rows = [];
         foreach (ClassListCheckService::GROUPS as $key => $label) {
             foreach ($result['groups'][$key] as $r) {
-                $rows[] = [$label, $r['name'], $r['section'], $r['id_number'] ?? '', $r['student_section'] ?? ''];
+                $rows[] = [$label, $r['name'], $r['section'], $r['id_number'] ?? '', $r['student_section'] ?? '',
+                    (($r['sheet'] ?? null) ? $r['sheet'].' ' : '').'row '.$r['row']];
             }
         }
-        foreach ($result['missing_name'] as $line) {
-            $rows[] = ['Missing name', '', 'Row '.$line, '', ''];
+        foreach ($result['missing_name'] as $where) {
+            $rows[] = ['Missing name', '', '', '', '', $where];
         }
 
         return Excel::download(
-            new ArrayExport(['Group', 'Name', 'Section', 'Student No.', 'Section on record'], $rows),
+            new ArrayExport(['Group', 'Name', 'Section', 'Student No.', 'Section on record', 'Row'], $rows),
             FileName::safe($class->subject).'_'.FileName::safe($class->section).'_Class_list_check.csv',
             ExcelFormat::CSV,
         );

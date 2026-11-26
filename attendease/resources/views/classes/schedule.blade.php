@@ -7,9 +7,10 @@
         $addBag = $errors->getBag('addSchedule');
     @endphp
 
-    <div class="max-w-3xl">
+    {{-- Full width: the list on the left, "Add a schedule" on the right (stacked on phones) --}}
+    <section class="card grid gap-6 lg:grid-cols-5 lg:gap-8" id="schedules">
         {{-- FR-CLS-12: weekly schedules, added, edited and removed one at a time --}}
-        <section class="card space-y-4" id="schedules">
+        <div class="space-y-4 lg:col-span-3">
             <div class="flex items-baseline justify-between gap-2">
                 <h2 class="h2">Weekly schedule</h2>
                 <span class="text-sm text-slate-500">{{ $class->schedules->count() }} {{ \Illuminate\Support\Str::plural('schedule', $class->schedules->count()) }}</span>
@@ -17,7 +18,7 @@
 
             @if ($class->schedules->isEmpty())
                 <p class="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
-                    No schedules yet. Add the days and times this class meets below.
+                    No schedules yet. Add the days and times this class meets.
                 </p>
             @else
                 <ul class="divide-y divide-slate-100 rounded-lg border border-slate-200" data-schedule-list>
@@ -57,16 +58,16 @@
                     @endforeach
                 </ul>
             @endif
+        </div>
 
-            <form method="POST" action="{{ route('schedules.store', $class) }}" class="space-y-3 border-t border-slate-100 pt-4" novalidate>
-                @csrf
-                <h3 class="font-semibold">Add a schedule</h3>
-                @include('classes._schedule-fields', ['key' => 'add', 'bag' => 'addSchedule', 'values' => []])
-                <div class="flex justify-end"><button class="btn-primary">+ Add schedule</button></div>
-                <p class="help">A schedule can't overlap another schedule of this class or of your other classes this semester.</p>
-            </form>
-        </section>
-    </div>
+        <form method="POST" action="{{ route('schedules.store', $class) }}" class="space-y-3 border-t border-slate-100 pt-5 lg:col-span-2 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8" novalidate>
+            @csrf
+            <h3 class="h2">Add a schedule</h3>
+            @include('classes._schedule-fields', ['key' => 'add', 'bag' => 'addSchedule', 'values' => []])
+            <button class="btn-primary w-full sm:w-auto">+ Add schedule</button>
+            <p class="help">A schedule can't overlap another schedule of this class or of your other classes this semester.</p>
+        </form>
+    </section>
     @push('scripts')
     <script>
         // Edit / Cancel open and close a schedule's edit form in place.

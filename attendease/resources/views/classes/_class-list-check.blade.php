@@ -19,7 +19,11 @@
             <a href="{{ route('class-list.template', [$class, 'xlsx']) }}" class="text-brand-600 hover:underline">Excel</a>
         </span>
     </div>
-    <p class="mb-3 text-sm text-slate-500">Upload your list with a <strong>Name</strong> and a <strong>Section</strong> column to see who has joined this class. This only checks; it doesn't add or notify anyone.</p>
+    <p class="mb-3 text-sm text-slate-500">
+        Upload your list with a <strong>Name</strong> column, and a <strong>Section</strong> column if you have one, to see who has joined this class.
+        One file can hold several sections: mixed in one sheet, or one sheet per section (a sheet named like "4-A" or "4-B" gives the section).
+        This only checks; it doesn't add or notify anyone.
+    </p>
 
     <form method="POST" action="{{ route('class-list.check', $class) }}" enctype="multipart/form-data" class="flex flex-col gap-2 sm:flex-row sm:items-start" novalidate>
         @csrf
@@ -36,7 +40,15 @@
     @if ($check)
         <div class="mt-4 border-t border-slate-100 pt-4" data-class-list-result>
             <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <p class="text-sm text-slate-600"><span class="font-medium text-slate-800">{{ $check['file'] }}</span> · {{ $check['rows'] }} {{ \Illuminate\Support\Str::plural('row', $check['rows']) }}</p>
+                <div class="text-sm text-slate-600">
+                    <p><span class="font-medium text-slate-800">{{ $check['file'] }}</span> · {{ $check['rows'] }} {{ \Illuminate\Support\Str::plural('row', $check['rows']) }}
+                        @if (count($check['sheets'] ?? []) > 1) · {{ count($check['sheets']) }} sheets @endif</p>
+                    @if (! empty($check['sections']))
+                        <p class="text-xs text-slate-500" data-sections>
+                            @foreach ($check['sections'] as $sec => $n){{ $sec === '' ? 'No section' : 'Section '.$sec }}: {{ $n }}{{ $loop->last ? '' : ' · ' }}@endforeach
+                        </p>
+                    @endif
+                </div>
                 <div class="flex gap-2">
                     <a href="{{ route('class-list.result', $class) }}" class="btn-secondary btn-sm">Download result (CSV)</a>
                     <form method="POST" action="{{ route('class-list.clear', $class) }}">@csrf @method('DELETE')<button class="btn-secondary btn-sm">Clear</button></form>
@@ -45,7 +57,7 @@
 
             @if ($check['missing_name'])
                 <p class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-missing-name>
-                    {{ count($check['missing_name']) }} {{ \Illuminate\Support\Str::plural('row', count($check['missing_name'])) }} with no name {{ count($check['missing_name']) === 1 ? 'was' : 'were' }} skipped: row {{ implode(', ', $check['missing_name']) }}.
+                    {{ count($check['missing_name']) }} {{ \Illuminate\Support\Str::plural('row', count($check['missing_name'])) }} with no name {{ count($check['missing_name']) === 1 ? 'was' : 'were' }} skipped: {{ implode(', ', $check['missing_name']) }}.
                 </p>
             @endif
 
@@ -71,7 +83,7 @@
                                             @elseif ($key === ClassListCheckService::POSSIBLE)
                                                 In class as {{ $r['student_section'] ?? 'no section' }} · <span class="font-mono">{{ $r['id_number'] }}</span>
                                             @else
-                                                Row {{ $r['row'] }}
+                                                {{ ($r['sheet'] ?? null) ? $r['sheet'].' · ' : '' }}Row {{ $r['row'] }}
                                             @endif
                                         </span>
                                     </li>
